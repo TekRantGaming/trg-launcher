@@ -125,6 +125,31 @@ struct PlayCheck {
   int page = -1;       // page to switch to then (e.g. the install page)
 };
 
+// A pop-up shown when PLAY is pressed, before the game starts: for a setting
+// the player should know about (King Kong warns about frame rates above 30).
+struct PromptButton {
+  std::string label;
+  bool accent = false;           // drawn in the accent colour (the recommended choice)
+  bool play = true;              // start the game after `action`; false just closes the pop-up
+  std::function<void()> action;  // runs first, e.g. to change a setting
+};
+struct PlayPrompt {
+  std::string title;
+  std::vector<std::string> paragraphs;
+  std::string footnote;               // dim, after the paragraphs
+  std::vector<PromptButton> buttons;  // a "Back" button is added unless one already has play = false
+};
+
+// One card on an achievements page.
+struct AchievementCard {
+  ImTextureID icon{};       // optional; drawn greyed out while locked
+  std::string title;
+  std::string description;  // shown when unlocked, or always when `locked_description` is empty
+  std::string locked_description;
+  int points = 0;           // gamerscore; 0 hides it
+  bool unlocked = false;
+};
+
 enum class Result { kNone, kPlay, kQuit };
 
 enum class Status { kReady, kAttention, kBusy };
@@ -141,6 +166,12 @@ struct LauncherConfig {
   std::function<bool()> on_save;                             // save extra files (key bindings...)
   std::function<void()> on_reset;                            // after "Reset all settings"
   std::function<void(const std::string& path)> on_file_drop;  // a file dropped on the window
+  // Asked after can_play when PLAY is pressed. Return a prompt to show it first;
+  // its buttons decide whether the game starts.
+  std::function<std::optional<PlayPrompt>()> before_play;
+  // Settings that only take effect after a restart (window size, renderer...).
+  // After kPlay, Launcher::restart_needed() says whether any of them changed.
+  std::vector<std::string> restart_keys;
 
   std::string hints = "Enter  Play        Esc  Quit        Ctrl+S  Save";
   std::string note = "Settings are saved when you press Play.";
@@ -207,6 +238,13 @@ class Ui {
   void Spacer(float height = 8.0f);
   bool Section(const char* title, bool open_by_default = false);  // collapsing header
 
+  // -- achievements
+  // "12 / 50 unlocked     240 / 1000 G" (points are left out when total_points is 0).
+  void AchievementSummary(int unlocked, int total, int points = 0, int total_points = 0);
+  void AchievementCardView(const AchievementCard& card, float width = -1.0f);
+  // Cards in up to `max_columns` columns, depending on the page width.
+  void AchievementGrid(const std::vector<AchievementCard>& cards, int max_columns = 2);
+
   void SetStatus(std::string text, double seconds = 4.0);
 
  private:
@@ -244,6 +282,10 @@ class Launcher {
   int FindPage(std::string_view name) const;
   int page() const { return page_; }
   void RequestPlay() { want_play_ = true; }
+  // Shows a pop-up over the launcher (the same one before_play uses).
+  void ShowPrompt(PlayPrompt prompt);
+  // After kPlay: whether a LauncherConfig::restart_keys setting changed while the launcher was open.
+  bool restart_needed() const;
   void RequestQuit() { want_quit_ = true; }
   void DropFile(const std::string& path);  // for hosts: forwards to config.on_file_drop
   bool capturing_key() const { return !ui_.capturing_.empty(); }
@@ -260,6 +302,7 @@ class Launcher {
   void DrawFooter(ImVec2 origin, float w, float h);
   void DrawPlayButton(ImVec2 size, bool can_play);
   void HandleHotkeys();
+  void DrawPrompt();
   Result TryPlay();
 
   LauncherConfig config_;
@@ -271,6 +314,11 @@ class Launcher {
   double status_until_ = 0.0;
   bool nav_suspended_ = false;
   ImGuiConfigFlags saved_nav_flags_ = 0;
+  std::optional<PlayPrompt> prompt_;
+  bool open_prompt_ = false;
+  bool prompt_confirmed_ = false;  // a prompt button chose to play: skip before_play once
+  std::vector<std::string> restart_baseline_;
+  int autoplay_frames_ = -1;       // TRG_LAUNCHER_AUTOPLAY: frames left before PLAY
 };
 
 // Whether to show the launcher at startup: always when the game cannot start

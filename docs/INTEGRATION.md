@@ -221,3 +221,102 @@ config.branding.background = trg::headers::Image(&title_texture, &title_aspect, 
 
 `shade_title_side` and `fade_into_page` darken the area behind the title and blend the header into the page. Turn
 both off for bright headers such as the SMS sky.
+
+## 8. A pop-up before Play
+
+`before_play` runs after `can_play` when PLAY is pressed. Return a `PlayPrompt` to show it first; each button can
+change settings and then start the game. King Kong uses it to warn about frame rates above 30:
+
+```cpp
+config.before_play = [&]() -> std::optional<trg::PlayPrompt> {
+  const int fps = settings.GetInt("kk_frame_rate", 30);
+  if (fps > 0 && fps <= 30) return std::nullopt;            // nothing to say: play straight away
+  trg::PlayPrompt p;
+  p.title = "Frame rate above 30 FPS";
+  p.paragraphs = {"King Kong was made to run at 30 FPS. Above that, some animations can look wrong.",
+                  "We recommend 30 FPS. 60 FPS also works well: the issues are there, but much less noticeable."};
+  p.footnote = "This will be fixed in a future update.";
+  p.buttons = {{"Play at 30 FPS", /*accent*/ true, /*play*/ true, [&] { settings.Set("kk_frame_rate", "30"); }},
+               {"Keep " + std::to_string(fps) + " FPS", false, true, {}}};
+  return p;                                                  // a "Back" button is added
+};
+```
+
+`launcher.ShowPrompt(prompt)` shows the same pop-up at any other time (buttons with `play = false` just close it).
+
+## 9. Settings that need a restart
+
+List them in `config.restart_keys`. After `Frame()` returns `kPlay`, `launcher.restart_needed()` says whether any of
+them changed while the launcher was open, so the game can relaunch itself instead of starting:
+
+```cpp
+config.restart_keys = {"window_width", "window_height", "monitor", "present_effect"};
+...
+if (launcher.restart_needed()) RelaunchSelf(); else StartGame();
+```
+
+## 10. Achievements page
+
+```cpp
+std::vector<trg::AchievementCard> cards;
+for (const auto& a : game_achievements)
+  cards.push_back({a.icon_texture, a.name, a.description, a.locked_hint, a.gamerscore, a.unlocked});
+ui.AchievementSummary(unlocked, int(cards.size()), points, total_points);   // "12 / 50 unlocked   240 / 1000 G"
+ui.AchievementGrid(cards);                                                  // one or two columns by width
+```
+
+Locked cards draw their icon greyed out and show `locked_description` when it is set.
+
+## 11. Installing from an Xbox 360 disc image (`trg/xbox360.h`)
+
+```cpp
+const uint32_t title = trg::ReadXbox360TitleId(picked);    // 0: not an Xbox 360 disc image
+if (title != 0x555307D3) { ui.SetStatus("That is not King Kong.", 6); return; }
+install_task.Start("Installing", [=](trg::Task& t) { return trg::ExtractXbox360Disc(t, picked, game_dir); });
+```
+
+It reads plain XISO and XGD1/2/3 "redump" images, reports progress in bytes, honours Cancel and never writes outside
+`game_dir`, whatever names the disc contains.
+
+## 12. Downloads and shader packs (`trg/download.h`, `trg/shader_pack.h`)
+
+`trg::HttpGet()` and `trg::DownloadFile()` fetch over HTTPS (WinHTTP on Windows, the system's `curl` elsewhere), on a
+`Task` with progress. Nothing is contacted until the game calls them.
+
+For ReXGlue ports, a shader pack lets a first play-through run without pauses for new effects. Publish the game's
+shader cache files (built by playing the game) plus a `shader-pack.txt` manifest as release assets, then add the row:
+
+```cpp
+trg::ShaderPackRowState pack;   // keep it alive with the launcher
+...
+trg::ShaderPackRow(ui, pack, "https://github.com/OWNER/REPO/releases/download/shader-packs/", cache_dir);
+```
+
+It shows **Download shader pack**, or **Check for a newer pack** once one is installed, and merges the pack into the
+player's cache by hash, keeping everything already there. The runtime prepares the whole cache each time the game
+starts. The pack holds Xbox 360 shader code and pipeline descriptions, not GPU binaries, so every player's own driver
+still compiles it. King Kong Recompiled's `tools/make_shader_pack.py` builds a pack from one or more caches.
+
+## 13. Game-side helpers (`trg/game_helpers.h`)
+
+These don't draw anything; call them from the game itself:
+
+```cpp
+Log(trg::TuneProcessScheduling());              // 1 ms timers, no Windows 11 power throttling
+trg::InstallCrashReports(logs_dir, "King Kong"); // crash-<time>.txt + .dmp on a crash (after the engine's handlers)
+
+trg::FrameTimeStats stats;                      // every 10 s: average, 1% low, worst, frames over 50/100 ms
+if (auto line = stats.Add(frame_ms)) Log(*line);
+```
+
+## 14. Testing
+
+`TRG_LAUNCHER_AUTOPLAY=1` (or a number of frames) presses PLAY by itself after two seconds, skipping any
+`before_play` prompt, for automated test runs.
+
+### ReXGlue: keep launcher textures alive
+
+On ReXGlue's Vulkan backend, the frame that closes the launcher is drawn after the launcher dialog is gone. If the
+dialog frees its textures (icon, header art, achievement icons) in its destructor, the GPU then reads freed memory and
+the game crashes as Play is pressed (seen on Linux). Keep those textures for the rest of the run, for example in a
+static list, rather than freeing them when the launcher closes.

@@ -556,11 +556,173 @@ bool Ui::Section(const char* title, bool open_by_default) {
   return open;
 }
 
+void Ui::AchievementSummary(int unlocked, int total, int points, int total_points) {
+  LeaveRows();
+  ImGui::PushFont(fonts().semibold, 0.0f);
+  if (total_points > 0)
+    ImGui::Text("%d / %d unlocked     %d / %d G", unlocked, total, points, total_points);
+  else
+    ImGui::Text("%d / %d unlocked", unlocked, total);
+  ImGui::PopFont();
+  ImGui::Dummy(ImVec2(0, 4 * scale_));
+}
+
+void Ui::AchievementCardView(const AchievementCard& a, float width) {
+  LeaveRows();
+  const Theme& t = theme();
+  const Fonts& f = fonts();
+  const float s = scale_, base = ImGui::GetFontSize();
+  const float card_w = width > 0 ? width : ImGui::GetContentRegionAvail().x;
+  const float card_h = 86 * s, icon = 60 * s;
+  const ImVec2 p = ImGui::GetCursorScreenPos();
+  ImGui::Dummy(ImVec2(card_w, card_h));
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  dl->AddRectFilled(p, ImVec2(p.x + card_w, p.y + card_h), Col(a.unlocked ? t.frame_hot : t.frame), 10 * s);
+  if (a.unlocked)
+    dl->AddRectFilled(p, ImVec2(p.x + 4 * s, p.y + card_h), Col(t.accent), 10 * s, ImDrawFlags_RoundCornersLeft);
+  float tx = p.x + 18 * s;
+  if (a.icon != ImTextureID{}) {
+    const ImVec2 i0(p.x + 14 * s, p.y + (card_h - icon) * 0.5f);
+    dl->AddImageRounded(ImTextureRef(a.icon), i0, ImVec2(i0.x + icon, i0.y + icon), ImVec2(0, 0), ImVec2(1, 1),
+                        a.unlocked ? IM_COL32_WHITE : IM_COL32(105, 110, 125, 200), 8 * s);
+    tx = i0.x + icon + 14 * s;
+  }
+  const float right = p.x + card_w - 14 * s;
+  dl->AddText(f.semibold, base, ImVec2(tx, p.y + 12 * s), Col(a.unlocked ? t.text : t.dim), a.title.c_str());
+  if (a.points > 0) {
+    const std::string g = std::to_string(a.points) + " G";
+    const ImVec2 gs = f.semibold->CalcTextSizeA(base * 0.9f, FLT_MAX, 0, g.c_str());
+    dl->AddText(f.semibold, base * 0.9f, ImVec2(right - gs.x, p.y + 13 * s), Col(a.unlocked ? t.accent : t.dim),
+                g.c_str());
+  }
+  const std::string& desc = a.unlocked || a.locked_description.empty() ? a.description : a.locked_description;
+  dl->AddText(f.regular, base * 0.84f, ImVec2(tx, p.y + 38 * s), Col(t.dim), desc.c_str(), nullptr, right - tx);
+  if (a.unlocked)
+    dl->AddText(f.semibold, base * 0.72f, ImVec2(tx, p.y + card_h - 22 * s), Col(t.accent), "UNLOCKED");
+}
+
+void Ui::AchievementGrid(const std::vector<AchievementCard>& cards, int max_columns) {
+  LeaveRows();
+  const float avail = ImGui::GetContentRegionAvail().x;
+  const int cols = std::max(1, std::min(max_columns, avail > 700 * scale_ ? 2 : 1));
+  const float gap = 12 * scale_;
+  const float card_w = (avail - gap * float(cols - 1)) / float(cols);
+  for (size_t i = 0; i < cards.size(); ++i) {
+    if (i % cols) ImGui::SameLine(0, gap);
+    ImGui::PushID(int(i));
+    AchievementCardView(cards[i], card_w);
+    ImGui::PopID();
+    if (i % cols == size_t(cols - 1) || i + 1 == cards.size()) ImGui::Dummy(ImVec2(0, gap * 0.5f));
+  }
+}
+
 // ---------------------------------------------------------------- launcher --
 Launcher::Launcher(LauncherConfig config) : config_(std::move(config)) {
   ui_.launcher_ = this;
   if (config_.fonts.size <= 0.0f) config_.fonts.size = 18.0f;
   page_ = std::clamp(config_.start_page, 0, std::max(0, int(config_.pages.size()) - 1));
+  if (config_.settings)
+    for (const std::string& key : config_.restart_keys) restart_baseline_.push_back(config_.settings->Get(key));
+  // Testing aid: TRG_LAUNCHER_AUTOPLAY=<frames> (or 1 for the default 120)
+  // presses PLAY on its own, skipping any before_play prompt.
+  if (const char* v = std::getenv("TRG_LAUNCHER_AUTOPLAY"); v && *v && *v != '0') {
+    const int frames = std::atoi(v);
+    autoplay_frames_ = frames > 1 ? frames : 120;
+  }
+}
+
+void Launcher::ShowPrompt(PlayPrompt prompt) {
+  bool has_back = false;
+  for (const PromptButton& b : prompt.buttons) has_back |= !b.play;
+  if (!has_back) prompt.buttons.push_back({"Back", false, false, {}});
+  prompt_ = std::move(prompt);
+  open_prompt_ = true;
+}
+
+bool Launcher::restart_needed() const {
+  for (size_t i = 0; i < restart_baseline_.size(); ++i)
+    if (config_.settings->Get(config_.restart_keys[i]) != restart_baseline_[i]) return true;
+  return false;
+}
+
+void Launcher::DrawPrompt() {
+  if (!prompt_) return;
+  const Theme& t = config_.theme;
+  const char* id = "##trg_prompt";
+  if (open_prompt_) {
+    ImGui::OpenPopup(id);
+    open_prompt_ = false;
+  }
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(std::min(600 * s_, vp->Size.x - 40 * s_), 0));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24 * s_, 20 * s_));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12 * s_);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+  ImGui::PushStyleColor(ImGuiCol_PopupBg, t.panel);
+  ImGui::PushStyleColor(ImGuiCol_Border, t.warn);
+  const bool open = ImGui::BeginPopupModal(id, nullptr,
+                                           ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar(3);
+  if (!open) {
+    prompt_.reset();  // closed some other way
+    return;
+  }
+  const PlayPrompt& p = *prompt_;
+  ImGui::PushFont(config_.fonts.bold, ImGui::GetFontSize() * 1.2f);
+  ImGui::TextUnformatted(p.title.c_str());
+  ImGui::PopFont();
+  ImGui::Dummy(ImVec2(0, 6 * s_));
+  ImGui::PushTextWrapPos(0.0f);
+  for (const std::string& para : p.paragraphs) {
+    ImGui::TextUnformatted(para.c_str());
+    ImGui::Dummy(ImVec2(0, 6 * s_));
+  }
+  if (!p.footnote.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, t.dim);
+    ImGui::TextUnformatted(p.footnote.c_str());
+    ImGui::PopStyleColor();
+  }
+  ImGui::PopTextWrapPos();
+  ImGui::Dummy(ImVec2(0, 10 * s_));
+  // Buttons that start the game share the first line; the others go below, full width.
+  std::vector<const PromptButton*> play_buttons, other;
+  for (const PromptButton& b : p.buttons) (b.play ? play_buttons : other).push_back(&b);
+  const PromptButton* chosen = nullptr;
+  const float gap = 8 * s_;
+  const float avail = ImGui::GetContentRegionAvail().x;
+  for (size_t i = 0; i < play_buttons.size(); ++i) {
+    if (i) ImGui::SameLine(0, gap);
+    const float bw = (avail - gap * float(play_buttons.size() - 1)) / float(play_buttons.size());
+    const PromptButton& b = *play_buttons[i];
+    ImGui::PushID(int(i));
+    if (b.accent ? ui_.AccentButton(b.label.c_str(), ImVec2(bw, 0)) : ImGui::Button(b.label.c_str(), ImVec2(bw, 0)))
+      chosen = &b;
+    ImGui::PopID();
+  }
+  for (size_t i = 0; i < other.size(); ++i) {
+    ImGui::PushID(int(100 + i));
+    if (other[i]->accent ? ui_.AccentButton(other[i]->label.c_str(), ImVec2(-FLT_MIN, 0))
+                         : ImGui::Button(other[i]->label.c_str(), ImVec2(-FLT_MIN, 0)))
+      chosen = other[i];
+    ImGui::PopID();
+  }
+  if (!chosen && !other.empty() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) chosen = other.front();
+  if (chosen) {
+    const PromptButton b = *chosen;  // copied: the prompt is reset below
+    ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+    prompt_.reset();
+    if (b.action) b.action();
+    if (b.play) {
+      prompt_confirmed_ = true;
+      want_play_ = true;
+    }
+    return;
+  }
+  ImGui::EndPopup();
 }
 
 Launcher::~Launcher() {
@@ -633,6 +795,7 @@ Result Launcher::Frame() {
 
   DrawFooter(ImVec2(vp->Pos.x + margin, vp->Pos.y + h - footer), w - margin * 2, footer);
   HandleHotkeys();
+  DrawPrompt();
   ImGui::End();
   ImGui::PopFont();
   ImGui::GetStyle() = saved_style;
@@ -652,6 +815,10 @@ Result Launcher::Frame() {
     want_quit_ = want_play_ = false;
     return Result::kQuit;
   }
+  if (autoplay_frames_ > 0 && --autoplay_frames_ == 0) {
+    prompt_confirmed_ = true;
+    want_play_ = true;
+  }
   if (want_play_) {
     want_play_ = false;
     return TryPlay();
@@ -666,6 +833,13 @@ Result Launcher::TryPlay() {
     GoToPage(check.page);
     return Result::kNone;
   }
+  if (!prompt_confirmed_ && config_.before_play) {
+    if (auto prompt = config_.before_play()) {
+      ShowPrompt(std::move(*prompt));
+      return Result::kNone;
+    }
+  }
+  prompt_confirmed_ = false;
   if (config_.save_on_play) {
     bool ok = config_.settings->Save();
     if (config_.on_save) ok = config_.on_save() && ok;

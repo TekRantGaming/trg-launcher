@@ -38,3 +38,15 @@ The full guide is in docs/INTEGRATION.md.
 - `include/trg/headers.h`: header scenes (`Space`, `SkyAndSea`, `Image`, `Gradient`, `Layers`)
 - `include/trg/platform.h`: file dialogs, `OpenInFileManager`, `ShiftHeld`, `Task` (background jobs), `CopyFileJob`
 - `include/trg/standalone.h`: `RunStandalone` (SDL2 + OpenGL 3), `CreateTextureRGBA`
+- `include/trg/xbox360.h`: `ReadXbox360TitleId`, `ExtractXbox360Disc` (install from an Xbox 360 disc image)
+- `include/trg/download.h`: `HttpGet`, `DownloadFile` (WinHTTP on Windows, curl elsewhere)
+- `include/trg/shader_pack.h`: ReXGlue shader packs: `ShaderPackRow`, `InstallShaderPack`, `MergeShaderStorageFile`
+- `include/trg/game_helpers.h`: game-side `TuneProcessScheduling`, `InstallCrashReports`, `FrameTimeStats`
+
+## Lessons from King Kong Recompiled
+
+- Warn about a risky setting with `LauncherConfig::before_play`, not a popup of the game's own.
+- On ReXGlue's Vulkan backend, keep launcher textures alive after the launcher closes (see INTEGRATION.md, section 14).
+- `TRG_LAUNCHER_AUTOPLAY=1` presses PLAY by itself: use it to test the game start without clicking.
+- Per-game features that patch the game itself (King Kong's button prompts, its render-quality presets) stay in the
+  game. Only the parts any port can use belong here.

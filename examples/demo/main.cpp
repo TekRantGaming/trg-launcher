@@ -2,7 +2,7 @@
 // also the template for a new port: copy it, rename, and replace the pages.
 //
 //   trg_launcher_demo [--theme midnight|ocean|ember] [--page N]
-//                     [--screenshot out.ppm] [--ready]
+//                     [--screenshot out.ppm] [--ready] [--prompt]
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -121,8 +121,8 @@ struct Demo {
   }
 
   static void PageGameplay(trg::Ui& ui) {
-    ui.Choice("Frame rate", "60 runs gameplay at twice the original frame rate, at the game's normal speed.",
-              "frame_rate", "30", {{"30", "30 fps (original)"}, {"60", "60 fps"}});
+    ui.Choice("Frame rate", "30 is the original. Above it, PLAY asks first (see before_play in main).", "frame_rate",
+              "30", {{"30", "30 fps (original)"}, {"60", "60 fps"}, {"120", "120 fps"}, {"0", "Unlimited"}});
     ui.Toggle("Skip intro movies", "Go straight to the title screen.", "skip_movies", false);
     ui.Toggle("Performance overlay", "Shows the frame rate. Toggle in game with F3.", "overlay", false, "Hidden",
               "Shown");
@@ -142,6 +142,25 @@ struct Demo {
         if (auto key = ui.KeyBindRow(b.label, nullptr, settings.Get(b.key, b.def)))
           settings.Set(b.key, ImGui::GetKeyName(*key));
     }
+  }
+
+  void PageAchievements(trg::Ui& ui) {
+    ui.Toggle("Notifications", "A pop-up when you unlock an achievement in game.", "achievement_toasts", true);
+    const ImTextureID icon = ui.launcher().config().branding.icon;
+    const std::vector<trg::AchievementCard> cards = {
+        {icon, "First steps", "Finish the first level.", "", 10, true},
+        {icon, "Collector", "Find every hidden coin.", "Some coins are well hidden.", 30, false},
+        {icon, "Speed runner", "Finish the game in under two hours.", "", 50, false},
+        {icon, "No damage", "Beat a boss without being hit.", "", 20, true},
+    };
+    int unlocked = 0, points = 0, total = 0;
+    for (const auto& c : cards) {
+      total += c.points;
+      if (c.unlocked) ++unlocked, points += c.points;
+    }
+    ui.Spacer();
+    ui.AchievementSummary(unlocked, int(cards.size()), points, total);
+    ui.AchievementGrid(cards);
   }
 
   void PageAbout(trg::Ui& ui) {
@@ -226,11 +245,13 @@ int main(int argc, char** argv) {
   Demo demo;
   std::string theme, screenshot;
   int start_page = -1;
+  bool show_prompt = false;
   for (int i = 1; i < argc; ++i) {
     if (!std::strcmp(argv[i], "--theme") && i + 1 < argc) theme = argv[++i];
     else if (!std::strcmp(argv[i], "--page") && i + 1 < argc) start_page = std::atoi(argv[++i]);
     else if (!std::strcmp(argv[i], "--screenshot") && i + 1 < argc) screenshot = argv[++i];
     else if (!std::strcmp(argv[i], "--ready")) demo.force_ready = true;
+    else if (!std::strcmp(argv[i], "--prompt")) show_prompt = true;
   }
   if (!theme.empty()) demo.settings.Set("theme", theme);
 
@@ -249,8 +270,26 @@ int main(int argc, char** argv) {
       {"Graphics", "Resolution, anti-aliasing and the final picture.", Demo::PageGraphics},
       {"Gameplay", "Frame rate, movies, language and the overlay.", Demo::PageGameplay},
       {"Controls", "Controller options and keyboard bindings.", [&](trg::Ui& ui) { demo.PageControls(ui); }},
+      {"Achievements", "What you have unlocked so far.", [&](trg::Ui& ui) { demo.PageAchievements(ui); }},
       {"About", "About this launcher, and where your settings live.", [&](trg::Ui& ui) { demo.PageAbout(ui); }},
   };
+  // A pop-up before PLAY when a setting needs a word of warning (King Kong's
+  // frame-rate warning). Its buttons can change the setting and then play.
+  config.before_play = [&]() -> std::optional<trg::PlayPrompt> {
+    const int fps = demo.settings.GetInt("frame_rate", 30);
+    if (fps > 0 && fps <= 30) return std::nullopt;
+    trg::PlayPrompt p;
+    p.title = "Frame rate above 30 FPS";
+    p.paragraphs = {"Demo Quest was made to run at 30 FPS. Above that, some animations can look wrong.",
+                    "We recommend 30 FPS. 60 FPS also works well: the issues are there, but much less noticeable."};
+    p.footnote = "This will be fixed in a future update.";
+    p.buttons = {{"Play at 30 FPS", true, true, [&] { demo.settings.Set("frame_rate", "30"); }}};
+    if (fps != 60) p.buttons.push_back({"Play at 60 FPS", false, true, [&] { demo.settings.Set("frame_rate", "60"); }});
+    p.buttons.push_back({fps <= 0 ? "Keep unlimited" : "Keep " + std::to_string(fps) + " FPS", false, true, {}});
+    return p;  // a "Back" button is added
+  };
+  // Settings the game only reads at startup: compare after PLAY.
+  config.restart_keys = {"resolution"};
   config.start_page = start_page >= 0 ? start_page : demo.Installed() ? 1 : 0;
   config.can_play = [&] {
     if (demo.install.running()) return trg::PlayCheck{false, "Wait for the install to finish.", 0};
@@ -276,6 +315,10 @@ int main(int argc, char** argv) {
   int frames = 0;
   if (!screenshot.empty())
     hooks.after_render = [&](trg::Launcher& l, int w, int h) {
+      if (show_prompt && frames == 10) {  // press PLAY at 60 FPS to show the before_play pop-up
+        demo.settings.Set("frame_rate", "60");
+        l.RequestPlay();
+      }
       if (++frames == 45) {
         WritePpm(screenshot.c_str(), w, h);
         l.RequestQuit();
@@ -283,6 +326,8 @@ int main(int argc, char** argv) {
     };
 
   const trg::Result r = trg::RunStandalone(launcher, window, hooks);
-  if (r == trg::Result::kPlay) std::puts("PLAY pressed: the game would start now.");
+  if (r == trg::Result::kPlay)
+    std::puts(launcher.restart_needed() ? "PLAY pressed: the game would restart to apply the new resolution."
+                                        : "PLAY pressed: the game would start now.");
   return 0;
 }

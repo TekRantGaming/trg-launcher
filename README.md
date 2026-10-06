@@ -29,6 +29,13 @@ library, so a new port only describes its pages and gets the same launcher.
   `Theme::WithAccent()` recolours any of them.
 - **Header scenes:** `Space` (stars and a planet), `SkyAndSea` (sun and waves), `Image` (a title-screen capture or key
   art), `Gradient`, or your own painter function.
+- **From King Kong Recompiled (1.1):**
+  - a themed **pop-up before Play** for settings the player should know about, such as a frame-rate warning
+  - **restart detection** for settings that only apply at startup
+  - an **achievements page** with Xbox 360-style cards and an unlocked / gamerscore summary
+  - **Xbox 360 disc-image installs** (title ID check and extraction with progress)
+  - **HTTPS downloads** and, for ReXGlue ports, a **shader pack** row that removes first-time shader pauses
+  - game-side helpers: crash reports, 1 ms timers without power throttling, and a frame-time summary for logs
 - **Two ways to host it:**
   - *Embedded:* call `launcher.Frame()` inside the game's existing Dear ImGui frame. This suits ReXGlue titles such as
     OKX.
@@ -100,7 +107,15 @@ Linux or macOS, run `cmake -B build -G Ninja && cmake --build build`.
 build\examples\demo\trg_launcher_demo.exe --theme ocean
 ```
 
-You can also pass `--page N`, `--ready` (pretend the game is installed) and `--screenshot out.ppm`.
+You can also pass `--page N`, `--ready` (pretend the game is installed), `--screenshot out.ppm` and `--prompt` (press
+PLAY at 60 FPS to show the before-Play pop-up).
+
+## Changes
+
+- **1.1.0:** features from King Kong Recompiled: `before_play` pop-ups, `restart_keys`, achievement cards,
+  `trg/xbox360.h`, `trg/download.h`, `trg/shader_pack.h`, `trg/game_helpers.h` and `TRG_LAUNCHER_AUTOPLAY`. Existing
+  games build unchanged.
+- **1.0.0:** the launcher from Outpost Kaloki X and the Super Mario Sunshine port as one library.
 
 ## Requirements
 
