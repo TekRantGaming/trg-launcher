@@ -2,7 +2,7 @@
 // also the template for a new port: copy it, rename, and replace the pages.
 //
 //   trg_launcher_demo [--theme midnight|ocean|ember] [--page N]
-//                     [--screenshot out.ppm] [--ready] [--prompt]
+//                     [--screenshot out.ppm] [--ready] [--prompt] [--update-preview]
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -19,6 +19,7 @@
 #include "trg/launcher.h"
 #include "trg/platform.h"
 #include "trg/standalone.h"
+#include "trg/updater.h"
 
 namespace {
 
@@ -40,6 +41,8 @@ struct Demo {
   std::string install_error;
   std::vector<uint32_t> icon_pixels;
   bool force_ready = false;
+  trg::UpdaterConfig update_config;  // see SetUpUpdates
+  trg::UpdatesState updates;         // keep it alive with the launcher
 
   bool Installed() const {
     if (force_ready) return true;
@@ -163,6 +166,24 @@ struct Demo {
     ui.AchievementGrid(cards);
   }
 
+  // Updates from the port's GitHub releases (trg/updater.h, docs/UPDATER.md). A real port fills in its own repos,
+  // its program's name and the folders players keep their game, saves and settings in.
+  void SetUpUpdates(const std::string& program_dir) {
+    trg::UpdaterConfig& c = update_config;
+    c.stable_repo = "TekRantGaming/trg-launcher";
+    c.beta_repo = c.stable_repo;  // betas as prereleases of the same repo; a port may use a repo of its own
+    c.current_version = "1.2.0";
+    c.program_dir = program_dir;
+    // c.program_name = "my_game.exe";  // optional: marks the program folder inside the release zip
+    c.protected_paths = {"game.img", "demo_settings.txt", "saves", "mods"};
+    c.state_file = program_dir + "update-check.txt";  // a real port keeps this in its user folder
+    c.log = [](const std::string& line) { std::printf("%s\n", line.c_str()); };
+    trg::CleanUpAfterUpdate(c);             // the .old files the last update left
+    trg::StartProgramFilesCheck(updates, c);  // fetches files an older updater left out (needs a file list)
+  }
+
+  void PageUpdates(trg::Ui& ui) { trg::UpdatesRows(ui, updates, update_config); }
+
   void PageAbout(trg::Ui& ui) {
     ui.Paragraph(
         "A demo of TRG Launcher, the shared launcher for TekRant Gaming PC ports. No game is included: each port "
@@ -175,7 +196,7 @@ struct Demo {
     ui.FolderRow("Settings file", "Every launcher setting, as plain text.", "Open settings file",
                  trg::AbsolutePath(settings.path()));
     ui.ResetAllRow();
-    ui.Info("Version", "TRG Launcher 1.0.0");
+    ui.Info("Version", "TRG Launcher 1.2.0");
   }
 
   void ApplyTheme(trg::Launcher& l) {
@@ -245,13 +266,14 @@ int main(int argc, char** argv) {
   Demo demo;
   std::string theme, screenshot;
   int start_page = -1;
-  bool show_prompt = false;
+  bool show_prompt = false, update_preview = false;
   for (int i = 1; i < argc; ++i) {
     if (!std::strcmp(argv[i], "--theme") && i + 1 < argc) theme = argv[++i];
     else if (!std::strcmp(argv[i], "--page") && i + 1 < argc) start_page = std::atoi(argv[++i]);
     else if (!std::strcmp(argv[i], "--screenshot") && i + 1 < argc) screenshot = argv[++i];
     else if (!std::strcmp(argv[i], "--ready")) demo.force_ready = true;
     else if (!std::strcmp(argv[i], "--prompt")) show_prompt = true;
+    else if (!std::strcmp(argv[i], "--update-preview")) update_preview = true;
   }
   if (!theme.empty()) demo.settings.Set("theme", theme);
 
@@ -271,6 +293,8 @@ int main(int argc, char** argv) {
       {"Gameplay", "Frame rate, movies, language and the overlay.", Demo::PageGameplay},
       {"Controls", "Controller options and keyboard bindings.", [&](trg::Ui& ui) { demo.PageControls(ui); }},
       {"Achievements", "What you have unlocked so far.", [&](trg::Ui& ui) { demo.PageAchievements(ui); }},
+      {"Updates", "New versions of the port, straight from its releases on GitHub.",
+       [&](trg::Ui& ui) { demo.PageUpdates(ui); }, [&] { return trg::UpdateWaiting(demo.updates); }},
       {"About", "About this launcher, and where your settings live.", [&](trg::Ui& ui) { demo.PageAbout(ui); }},
   };
   // A pop-up before PLAY when a setting needs a word of warning (King Kong's
@@ -304,6 +328,16 @@ int main(int argc, char** argv) {
   demo.ApplyTheme(launcher);
   if (start_page < 0 && !demo.Installed()) launcher.GoToPage(0);
   demo.MakeIcon();
+  if (char* base = SDL_GetBasePath()) {
+    demo.SetUpUpdates(base);
+    SDL_free(base);
+  }
+  if (update_preview) {  // what the page shows once a check found a new version
+    demo.updates.check.found = trg::Release{"1.3.0", "stable", "https://github.com/TekRantGaming/trg-launcher"};
+    demo.updates.message = "Version 1.3.0 is out. You have version 1.2.0.";
+  } else if (demo.settings.GetBool("update_check", true) && screenshot.empty()) {
+    trg::StartUpdateCheck(demo.updates, demo.update_config, demo.settings.Get("update_channel", "stable"));
+  }
 
   trg::WindowOptions window;
   window.title = "Demo Quest - Launcher";

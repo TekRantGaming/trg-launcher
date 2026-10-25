@@ -320,3 +320,42 @@ On ReXGlue's Vulkan backend, the frame that closes the launcher is drawn after t
 dialog frees its textures (icon, header art, achievement icons) in its destructor, the GPU then reads freed memory and
 the game crashes as Play is pressed (seen on Linux). Keep those textures for the rest of the run, for example in a
 static list, rather than freeing them when the launcher closes.
+
+## 15. Updates (`trg/updater.h`)
+
+An Updates page that checks the port's GitHub releases, installs a new version and restarts. Read
+[UPDATER.md](UPDATER.md) before the first release: the first updater a game ships decides what every later update
+can do.
+
+```cpp
+trg::UpdaterConfig updates;                 // keep both alive with the launcher
+trg::UpdatesState update_state;
+
+updates.stable_repo = "OWNER/my-game";
+updates.beta_repo = "OWNER/my-game-beta";    // optional: adds the Stable / Beta choice
+updates.current_version = MY_GAME_VERSION;   // "1.2.0" or "2.0.0-beta.3"
+updates.program_dir = exe_dir;               // UTF-8, the folder the release zip unpacks to
+updates.program_name = "my_game.exe";        // optional: finds that folder inside the zip
+updates.protected_paths = {"game", "settings.toml", user_dir};  // never written or deleted
+updates.state_file = user_dir + "/update-check.txt";
+updates.log = [](const std::string& line) { Log(line); };
+
+trg::CleanUpAfterUpdate(updates);                    // at startup: the .old files of the last update
+trg::StartProgramFilesCheck(update_state, updates);  // the first start check
+if (settings.GetBool("update_check", true))
+  trg::StartUpdateCheck(update_state, updates, settings.Get("update_channel", "stable"));
+
+config.pages.push_back({"Updates", "New versions of the port.",
+                        [&](trg::Ui& ui) { trg::UpdatesRows(ui, update_state, updates); },
+                        [&] { return trg::UpdateWaiting(update_state); }});
+```
+
+The rows show the version, the channel choice, "Check at startup", and **Check for updates**, which becomes
+**Install version X** (with **What's new**) and then **Restart now**, with progress, Cancel and the result in words.
+Restarting saves the settings, starts the program again and closes the launcher; pass
+`UpdatesRowOptions::on_restart` when the game must quit some other way. Every step is also a plain function
+(`CheckForUpdate`, `InstallUpdate`, `CheckProgramFiles` on a `Task`) for games with their own screens.
+
+Package each release with `tools/make_update_files.py package ...` (UPDATER.md, Packaging): it writes the file list
+the updater installs from, the retired list, the zip and `SHA256SUMS.txt`, then checks them. Upload the zip and
+`SHA256SUMS.txt` to the release.

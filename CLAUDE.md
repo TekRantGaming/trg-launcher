@@ -42,11 +42,15 @@ The full guide is in docs/INTEGRATION.md.
 - `include/trg/download.h`: `HttpGet`, `DownloadFile` (WinHTTP on Windows, curl elsewhere)
 - `include/trg/shader_pack.h`: ReXGlue shader packs: `ShaderPackRow`, `InstallShaderPack`, `MergeShaderStorageFile`
 - `include/trg/game_helpers.h`: game-side `TuneProcessScheduling`, `InstallCrashReports`, `FrameTimeStats`
+- `include/trg/updater.h`: updates from GitHub releases (`UpdaterConfig`, `UpdatesRows`, `InstallUpdate`,
+  `CheckProgramFiles`); packaging with `tools/make_update_files.py`; the rules and lessons in docs/UPDATER.md
 
 ## Lessons from King Kong Recompiled
 
 - Warn about a risky setting with `LauncherConfig::before_play`, not a popup of the game's own.
 - On ReXGlue's Vulkan backend, keep launcher textures alive after the launcher closes (see INTEGRATION.md, section 14).
+- A port's FIRST public release must already have the updater (docs/UPDATER.md): an older updater in players' hands
+  can never be fixed. Package every release with `tools/make_update_files.py` and attach `SHA256SUMS.txt`.
 - `TRG_LAUNCHER_AUTOPLAY=1` presses PLAY by itself: use it to test the game start without clicking.
 - Per-game features that patch the game itself (King Kong's button prompts, its render-quality presets) stay in the
   game. Only the parts any port can use belong here.

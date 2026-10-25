@@ -36,6 +36,10 @@ library, so a new port only describes its pages and gets the same launcher.
   - **Xbox 360 disc-image installs** (title ID check and extraction with progress)
   - **HTTPS downloads** and, for ReXGlue ports, a **shader pack** row that removes first-time shader pauses
   - game-side helpers: crash reports, 1 ms timers without power throttling, and a frame-time summary for logs
+- **Updates (1.2):** an Updates page that installs new versions from the port's GitHub releases: stable and beta
+  channels, a checked download, every listed file installed with undo if anything fails, the player's game, saves and
+  settings never touched, and a first start check that fetches missing files. See [docs/UPDATER.md](docs/UPDATER.md)
+  and `tools/make_update_files.py`.
 - **Two ways to host it:**
   - *Embedded:* call `launcher.Frame()` inside the game's existing Dear ImGui frame. This suits ReXGlue titles such as
     OKX.
@@ -108,10 +112,12 @@ build\examples\demo\trg_launcher_demo.exe --theme ocean
 ```
 
 You can also pass `--page N`, `--ready` (pretend the game is installed), `--screenshot out.ppm` and `--prompt` (press
-PLAY at 60 FPS to show the before-Play pop-up).
+PLAY at 60 FPS to show the before-Play pop-up) and `--update-preview` (the Updates page with a version waiting).
 
 ## Changes
 
+- **1.2.0:** the updater from King Kong Recompiled as a general module: `trg/updater.h`, the Updates rows, the
+  packaging script `tools/make_update_files.py` and docs/UPDATER.md. Existing games build unchanged.
 - **1.1.0:** features from King Kong Recompiled: `before_play` pop-ups, `restart_keys`, achievement cards,
   `trg/xbox360.h`, `trg/download.h`, `trg/shader_pack.h`, `trg/game_helpers.h` and `TRG_LAUNCHER_AUTOPLAY`. Existing
   games build unchanged.
