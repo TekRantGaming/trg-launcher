@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(trg_launcher VERSION 1.1.0 LANGUAGES C CXX)
+project(trg_launcher VERSION 1.2.0 LANGUAGES C CXX)
 
 # TRG Launcher: the shared pre-game launcher for TekRant Gaming PC ports.
 #
@@ -63,7 +63,9 @@ add_library(trg_launcher STATIC
   src/xbox360.cpp
   src/download.cpp
   src/shader_pack.cpp
-  src/game_helpers.cpp)
+  src/game_helpers.cpp
+  src/updater.cpp
+  src/updater_files.cpp)
 add_library(trg::launcher ALIAS trg_launcher)
 target_include_directories(trg_launcher PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(trg_launcher PUBLIC cxx_std_17)
@@ -134,6 +136,9 @@ if(_trg_top_level)
   add_executable(trg_helpers_test tests/helpers_test.cpp)
   target_link_libraries(trg_helpers_test PRIVATE trg_launcher)
   add_test(NAME helpers COMMAND trg_helpers_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  add_executable(trg_updater_test tests/updater_test.cpp)
+  target_link_libraries(trg_updater_test PRIVATE trg_launcher)
+  add_test(NAME updater COMMAND trg_updater_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 # ------------------------------------------------------------------- demo ---
