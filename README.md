@@ -128,3 +128,7 @@ PLAY at 60 FPS to show the before-Play pop-up) and `--update-preview` (the Updat
 - C++17
 - Dear ImGui **1.92 or newer**. The library uses the 1.92 `PushFont(font, size)` API.
 - For the standalone window: SDL2 and OpenGL 3.3
+
+## License
+
+MIT, see [LICENSE](LICENSE). Use it in any port or recompilation, change it and share your changes; keep the copyright notice.
