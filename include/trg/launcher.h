@@ -174,6 +174,7 @@ struct LauncherConfig {
   std::vector<std::string> restart_keys;
 
   std::string hints = "Enter  Play        Esc  Quit        Ctrl+S  Save";
+  std::string quit_label = "Quit";  // the footer button that returns Result::kQuit ("Back" when a host has a menu)
   std::string note = "Settings are saved when you press Play.";
   bool save_on_play = true;
 };
