@@ -1,6 +1,6 @@
 # TRG Launcher
 
-The pre-game launcher shared by TekRant Gaming PC ports. It started life as the launchers in
+The pre-game launcher shared by TekRantGaming PC ports. It started life as the launchers in
 [Outpost Kaloki X Recompiled](https://github.com/TekRantGaming/outpost-kaloki-x-recompiled) and the
 [Super Mario Sunshine PC port](https://github.com/TekRantGaming/sms-pc-port). This repo turns that design into one
 library, so a new port only describes its pages and gets the same launcher.

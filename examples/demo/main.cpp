@@ -186,7 +186,7 @@ struct Demo {
 
   void PageAbout(trg::Ui& ui) {
     ui.Paragraph(
-        "A demo of TRG Launcher, the shared launcher for TekRant Gaming PC ports. No game is included: each port "
+        "A demo of TRG Launcher, the shared launcher for TekRantGaming PC ports. No game is included: each port "
         "runs from the player's own copy of the game.");
     ui.Spacer(4);
     ui.LauncherVisibilityRow();

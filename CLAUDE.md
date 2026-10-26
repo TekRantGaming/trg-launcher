@@ -1,6 +1,6 @@
 # TRG Launcher: notes for Claude
 
-This repo is the shared launcher for every TekRant Gaming PC port. **When a new port needs a launcher, pull this repo
+This repo is the shared launcher for every TekRantGaming PC port. **When a new port needs a launcher, pull this repo
 in. Do not write a new one.** It already contains the design built for Outpost Kaloki X and the SMS port: animated
 header, sidebar pages, label/help rows with segmented buttons, the status card and the Quit / Save / PLAY footer.
 

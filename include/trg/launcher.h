@@ -1,4 +1,4 @@
-// TRG Launcher: the pre-game launcher shared by TekRant Gaming PC ports.
+// TRG Launcher: the pre-game launcher shared by TekRantGaming PC ports.
 //
 // A game describes its launcher (title, theme, header art, pages of settings)
 // in a LauncherConfig and calls Launcher::Frame() once per frame inside an

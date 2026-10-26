@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(trg_launcher VERSION 1.2.0 LANGUAGES C CXX)
 
-# TRG Launcher: the shared pre-game launcher for TekRant Gaming PC ports.
+# TRG Launcher: the shared pre-game launcher for TekRantGaming PC ports.
 #
 #   trg::launcher             the launcher itself (draws into any Dear ImGui frame)
 #   trg::launcher_standalone  its own SDL2 + OpenGL 3 window (TRG_LAUNCHER_STANDALONE)
