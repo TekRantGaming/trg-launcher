@@ -1,5 +1,16 @@
 # TRG Launcher
 
+**Two launchers live here, and both are kept.** Pick one per project:
+
+| | |
+| --- | --- |
+| **[TRG Launcher 2.0](launcher2/README.md)** | A console style dashboard for one game or a whole collection: game art, installs from the player's disc image or Xbox Live Arcade package, game and launcher updates, achievements, save backups, Add to Steam, Discord and Other TRG Projects. A project fills in one file. Made for The Whopping Recompilation Collection. |
+| **TRG Launcher 1.x** (below) | The settings window before one game, embedded in the game's own ImGui frame or in its own window. You write its pages in code. |
+
+![TRG Launcher 2.0](launcher2/docs/images/launcher-home.jpg)
+
+## TRG Launcher 1.x
+
 The pre-game launcher shared by TekRantGaming PC ports. It started life as the launchers in
 [Outpost Kaloki X Recompiled](https://github.com/TekRantGaming/outpost-kaloki-x-recompiled) and the
 [Super Mario Sunshine PC port](https://github.com/TekRantGaming/sms-pc-port). This repo turns that design into one
@@ -116,6 +127,10 @@ PLAY at 60 FPS to show the before-Play pop-up) and `--update-preview` (the Updat
 
 ## Changes
 
+- **2.0.0:** TRG Launcher 2.0 in [`launcher2/`](launcher2/README.md) (`trg::launcher2`, built when `TRG_LAUNCHER_2` is on):
+  The Whopping Recompilation Collection's launcher as a template with one project file, with Xbox Live Arcade
+  package installs from Trials: The Recompilation Collection. 1.x is unchanged and still the default; 1.x also gains
+  a Back label for the quit button, mouse buttons in key capture, and B and the bumpers on a controller.
 - **1.2.0:** the updater from King Kong Recompiled as a general module: `trg/updater.h`, the Updates rows, the
   packaging script `tools/make_update_files.py` and docs/UPDATER.md. Existing games build unchanged.
 - **1.1.0:** features from King Kong Recompiled: `before_play` pop-ups, `restart_keys`, achievement cards,

@@ -447,6 +447,12 @@ std::optional<ImGuiKey> Ui::KeyCapture(const char* id, const std::string& shown,
           capturing_.clear();
           break;
         }
+        // Mouse buttons can be bound too (King Kong: players could not bind them at first).
+        for (int k = ImGuiKey_MouseLeft; !result && k <= ImGuiKey_MouseMiddle; ++k) {
+          if (!ImGui::IsKeyPressed(ImGuiKey(k), false)) continue;
+          result = ImGuiKey(k);
+          capturing_.clear();
+        }
       }
     }
   } else if (ImGui::Button(shown.empty() ? "(none)" : shown.c_str(), ImVec2(width, 0))) {
@@ -966,7 +972,7 @@ void Launcher::DrawFooter(ImVec2 origin, float w, float h) {
   const float right = origin.x + w;
   ImGui::SetCursorScreenPos(ImVec2(right - play_w - bw * 2 - 24 * s_, cy - bh * 0.5f));
   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12 * s_);
-  if (ImGui::Button("Quit", ImVec2(bw, bh))) want_quit_ = true;
+  if (ImGui::Button(config_.quit_label.c_str(), ImVec2(bw, bh))) want_quit_ = true;
   ImGui::SameLine(0, 12 * s_);
   if (ImGui::Button("Save", ImVec2(bw, bh))) Save();
   ImGui::SameLine(0, 12 * s_);
@@ -1010,6 +1016,12 @@ void Launcher::HandleHotkeys() {
   if (capturing_key() || io.WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) return;
   if (ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false)) {
     want_play_ = true;
+  } else if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) && !ImGui::IsAnyItemActive()) {
+    want_quit_ = true;  // B: back / quit, like Esc
+  } else if (ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) && !config_.pages.empty()) {
+    GoToPage((page_ + int(config_.pages.size()) - 1) % int(config_.pages.size()));  // bumpers change pages
+  } else if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) && !config_.pages.empty()) {
+    GoToPage((page_ + 1) % int(config_.pages.size()));
   } else if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
     // Enter activates the focused control while navigating with the keyboard.
     if (!io.NavVisible && !ImGui::IsAnyItemActive()) want_play_ = true;

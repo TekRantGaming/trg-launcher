@@ -4,7 +4,16 @@ This repo is the shared launcher for every TekRantGaming PC port. **When a new p
 in. Do not write a new one.** It already contains the design built for Outpost Kaloki X and the SMS port: animated
 header, sidebar pages, label/help rows with segmented buttons, the status card and the Quit / Save / PLAY footer.
 
-## Adding it to a new game
+## Two launchers
+
+- **2.0** (`launcher2/`, `trg::launcher2`): the dashboard for one game or a collection, from The Whopping
+  Recompilation Collection. A project copies `launcher2/examples/whopping/project.cpp`, fills in its
+  `trg::hub::ProjectConfig` and calls `trg::hub::Run`. Read `launcher2/README.md` first. Improvements to the
+  dashboard belong in `launcher2/src`, never in a project's copy; anything project specific goes into
+  `ProjectConfig` (with a default that keeps existing projects working).
+- **1.x** (the rest of this repo): the settings window before one game, described below. 2.0 is built on it.
+
+## Adding 1.x to a new game
 
 1. `git submodule add https://github.com/TekRantGaming/trg-launcher.git third_party/trg-launcher`
 2. Pick the host:

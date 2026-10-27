@@ -1,5 +1,8 @@
 # Integrating TRG Launcher into a port
 
+This guide is for TRG Launcher 1.x. For the 2.0 dashboard (one game or a collection, one project file) see
+[launcher2/README.md](../launcher2/README.md).
+
 This guide covers adding the launcher to a game. [examples/demo/main.cpp](../examples/demo/main.cpp) is a working
 launcher that you can copy as a starting point.
 

@@ -1,0 +1,25 @@
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION PROJECT_VERSION_COMMAS
+PRODUCTVERSION PROJECT_VERSION_COMMAS
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "080904B0"
+    BEGIN
+      VALUE "CompanyName", "TekRantGaming"
+      VALUE "FileDescription", "The Whopping Recompilation Collection"
+      VALUE "FileVersion", PROJECT_VERSION
+      VALUE "ProductName", "The Whopping Recompilation Collection"
+      VALUE "ProductVersion", PROJECT_VERSION
+      VALUE "OriginalFilename", "whopping_launcher.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0809, 1200
+  END
+END
