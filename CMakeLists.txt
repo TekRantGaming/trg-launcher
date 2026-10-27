@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(trg_launcher VERSION 1.2.0 LANGUAGES C CXX)
+project(trg_launcher VERSION 2.0.0 LANGUAGES C CXX)
 
-# TRG Launcher: the shared pre-game launcher for TekRantGaming PC ports.
+# TRG Launcher: the shared launchers for TekRantGaming PC ports. Two launchers, pick one:
 #
-#   trg::launcher             the launcher itself (draws into any Dear ImGui frame)
-#   trg::launcher_standalone  its own SDL2 + OpenGL 3 window (TRG_LAUNCHER_STANDALONE)
+#   1.x  trg::launcher             a settings launcher before one game (draws into any Dear ImGui frame)
+#        trg::launcher_standalone  its own SDL2 + OpenGL 3 window (TRG_LAUNCHER_STANDALONE)
+#   2.0  trg::launcher2            a console style dashboard for one or more games, with art, installs from
+#                                  the player's disc or package, updates, achievements, saves, Add to Steam
+#                                  and Discord (TRG_LAUNCHER_2, needs the standalone window). See launcher2/.
 #
 # Dear ImGui 1.92+ comes from the parent project when it has a target for it
 # (TRG_LAUNCHER_IMGUI_TARGET, or a target named `imgui`), otherwise it is
@@ -18,6 +21,8 @@ endif()
 
 option(TRG_LAUNCHER_STANDALONE "Build the SDL2 + OpenGL 3 standalone window" ${_trg_top_level})
 option(TRG_LAUNCHER_BUILD_DEMO "Build the demo launcher" ${_trg_top_level})
+option(TRG_LAUNCHER_2 "Build TRG Launcher 2.0 (trg::launcher2)" ${_trg_top_level})
+option(TRG_LAUNCHER2_BUILD_EXAMPLE "Build the 2.0 example (The Whopping Recompilation Collection's launcher)" ${_trg_top_level})
 option(TRG_LAUNCHER_FETCH_DEPS "Download Dear ImGui / SDL2 when the parent project does not provide them" ON)
 set(TRG_LAUNCHER_IMGUI_TARGET "" CACHE STRING "Existing Dear ImGui target to use (empty: `imgui` if it exists, else download)")
 set(TRG_LAUNCHER_IMGUI_DIR "" CACHE PATH "Dear ImGui source folder, for the SDL2/OpenGL3 backends of the standalone window")
@@ -144,4 +149,9 @@ endif()
 # ------------------------------------------------------------------- demo ---
 if(TRG_LAUNCHER_BUILD_DEMO AND TRG_LAUNCHER_STANDALONE)
   add_subdirectory(examples/demo)
+endif()
+
+# --------------------------------------------------------- launcher 2.0 ---
+if(TRG_LAUNCHER_2 AND TRG_LAUNCHER_STANDALONE)
+  add_subdirectory(launcher2)
 endif()
