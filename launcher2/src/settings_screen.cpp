@@ -9,6 +9,7 @@
 // section.
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -21,6 +22,7 @@
 #include <trg/platform.h>
 
 #include "app.h"
+#include "psx.h"
 #include "sounds.h"
 
 namespace trg::hub {
@@ -236,6 +238,8 @@ int RenderScaleFor(const std::string& mode, int output_height) {
 }
 
 // --------------------------------------------------------- game sections ---
+void AddSharedSections(App& app, int g, std::vector<Section>& s);
+
 std::vector<Section> GameSections(App& app, int g) {
   trg::SettingsStore& st = *app.game_ui(g).settings;
   std::vector<Section> s;
@@ -438,6 +442,12 @@ std::vector<Section> GameSections(App& app, int g) {
     for (size_t i = 0; i < ach.cards.size(); ++i) r.Achievement(ach.icons[i], ach.cards[i]);
   }});
 
+  AddSharedSections(app, g, s);
+  return s;
+}
+
+// Saves and install, Updates and About: every game has them.
+void AddSharedSections(App& app, int g, std::vector<Section>& s) {
   s.push_back({"Saves and install", [&app, g](Rows& r) {
     const GameInfo& game = Games()[g];
     GameUi& gu = app.game_ui(g);
@@ -460,7 +470,8 @@ std::vector<Section> GameSections(App& app, int g) {
                 });
       }
     }
-    if (r.Button("Open the save folder", "Where the game keeps your profile, saves and achievements."))
+    if (r.Button("Open the save folder", IsPsx(game) ? "Where the game keeps your memory cards."
+                                                       : "Where the game keeps your profile, saves and achievements."))
       trg::OpenInFileManager(SavesDir(game));
     if (r.Button("Open the backups folder", "Your save backups.")) trg::OpenInFileManager(BackupsDir(game));
     if (r.Button("Delete saves", "Removes your saves. A backup is made first.") && !busy) {
@@ -469,7 +480,7 @@ std::vector<Section> GameSections(App& app, int g) {
               [u, &game] { u->manage.Start("Deleting saves", [&game](trg::Task& t) { return DeleteSavesJob(t, game); }); });
     }
     r.Heading("INSTALL");
-    const bool disc = game.source == InstallSource::kDisc;
+    const bool disc = game.source != InstallSource::kPackage;
     if (r.Button("Open the game folder", disc ? "The game's program files and the files from your disc."
                                               : "The game's program files and the files from your copy."))
       trg::OpenInFileManager(GameDir(game));
@@ -506,6 +517,25 @@ std::vector<Section> GameSections(App& app, int g) {
 
   s.push_back({"About", [&app, g](Rows& r) {
     const GameInfo& game = Games()[g];
+    if (IsPsx(game)) {
+      r.Paragraph(std::string(game.title) + " for PC, made by static recompilation of the PlayStation game with "
+                  "psxrecomp. You need your own disc.");
+      r.Info("Game", game.title);
+      const InstalledPsx installed = InstalledPsxDisc(game);
+      r.Info("Installed disc", installed.disc ? std::string(installed.disc->region) + " (" + installed.disc->serial + ")"
+                                              : std::string("None yet"));
+      for (const PsxDisc& d : game.psx_discs) {
+        std::string heading = std::string(d.region) + " disc";
+        for (char& c : heading) c = char(std::toupper(static_cast<unsigned char>(c)));
+        r.Heading(heading);
+        r.Info("Serial", d.serial);
+        r.Info("Disc image", std::string(d.copy_name) + ", " + d.copy_size);
+        r.Info("SHA1", d.copy_sha1);
+        r.Info("MD5", d.copy_md5);
+        r.Info("CRC32", d.copy_crc32);
+      }
+      r.Info("Settings file", GameSettingsPath(game));
+    } else {
     char id[16];
     std::snprintf(id, sizeof id, "%08X", game.title_id);
     r.Paragraph(std::string(game.title) + " for PC, made by static recompilation of the Xbox 360 game. You need "
@@ -519,6 +549,7 @@ std::vector<Section> GameSections(App& app, int g) {
     r.Info("MD5", game.copy_md5);
     r.Info("CRC32", game.copy_crc32);
     r.Info("Settings file", GameSettingsPath(game));
+    }
     if (r.Button("Reset all settings", "Puts every setting of this game back to how it started.")) {
       trg::SettingsStore* store = app.game_ui(g).settings.get();
       Confirm("Reset all settings?", "Every setting of " + std::string(game.title) + " goes back to how it started.",
@@ -528,27 +559,88 @@ std::vector<Section> GameSections(App& app, int g) {
               });
     }
   }});
+}
+
+// ------------------------------------------------- PlayStation sections ---
+// A psxrecomp port: the runtime's own settings (written to the build's settings.toml and input.ini at Play,
+// psx.cpp WritePsxRuntimeSettings). From Muppet RaceMania Recompiled, after The Simpsons Wrestling's launcher.
+std::vector<Section> PsxGameSections(App& app, int g) {
+  std::vector<Section> s;
+  s.push_back({"Display", [](Rows& r) {
+    r.Choice("Window mode", "Borderless fills the screen at your desktop resolution. Alt+Enter switches while you "
+             "play.", "window_mode", "borderless",
+             {{"windowed", "Windowed"}, {"borderless", "Borderless"}, {"fullscreen", "Exclusive"}});
+    r.Choice("Window size", "The size of the window when the game is windowed.", "window_width", "0",
+             {{"0", "Automatic"}, {"1280", "1280 \xC3\x97 960"}, {"1600", "1600 \xC3\x97 1200"}, {"1920", "1920 \xC3\x97 1440"},
+              {"2560", "2560 \xC3\x97 1920"}});
+    r.Choice("Monitor", "Which screen the game opens on.", "monitor", "0",
+             {{"0", "Main"}, {"1", "Second"}, {"2", "Third"}, {"3", "Fourth"}});
+    r.Choice("Vertical sync", "Waits for the display before showing a frame, which stops tearing.", "vsync", "on",
+             {{"off", "Off"}, {"on", "On"}, {"adaptive", "Adaptive"}});
+    r.Toggle("Fill the screen", "Off keeps the original 4:3 picture with black bars at the sides. On stretches it to "
+             "fill the screen.", "stretch", false);
+    r.Toggle("Frame rate counter", "Shows the frame rate in the window's title.", "fps_counter", false);
+  }});
+  s.push_back({"Graphics", [](Rows& r) {
+    r.Choice("Render resolution", "The game is drawn at this resolution, then scaled to the window. Above your "
+             "screen's resolution it smooths every edge.", "internal_resolution", "display",
+             {{"display", "Your screen"}, {"native", "Original (240p)"}, {"720p", "720p"}, {"1080p", "1080p"},
+              {"1440p", "1440p"}, {"4k", "4K"}});
+    r.Toggle("Smooth edges", "Anti aliasing (FXAA) after the picture is scaled.", "smooth_edges", true);
+    r.Toggle("Smooth textures", "Bilinear filtering. Off keeps the original sharp texture pixels.",
+             "texture_filtering", false);
+    r.Toggle("Stable geometry", "Sub pixel precision: stops the PlayStation's polygon wobble.", "geometry_correction",
+             true);
+    r.SliderInt("Sharpening", "Sharpens the final picture.", "sharpen", 0, 0, 100, 5, "%d%%");
+    r.SliderInt("Brightness", "100% is the original picture.", "brightness", 100, 50, 150, 5, "%d%%");
+    r.Choice("Screen filter", "Makes the picture look like it is on an old TV.", "screen_filter", "off",
+             {{"off", "Off"}, {"crt", "CRT"}, {"composite", "Composite"}, {"trinitron", "Trinitron"}});
+    r.SliderInt("Scanlines", "Dark lines between the picture's rows, like a CRT. 0% is off.", "scanlines", 0, 0, 100,
+                5, "%d%%");
+  }});
+  s.push_back({"Controller", [](Rows& r) {
+    r.Choice("Player 1", "Automatic uses a controller as soon as one is switched on, even after the game has "
+             "started.", "p1_input", "auto", {{"auto", "Automatic"}, {"keyboard", "Keyboard"}});
+    r.Choice("Player 2", "For two player games. Automatic uses a second controller, or the keyboard when player 1 "
+             "has a controller. It counts the controllers that are on when you press Play.", "p2_input", "auto",
+             {{"auto", "Automatic"}, {"controller", "Controller"}, {"keyboard", "Keyboard"}, {"none", "Off"}});
+    const std::vector<std::string> pads = ConnectedControllers();
+    std::string list;
+    for (size_t i = 0; i < pads.size(); ++i) list += (i ? ", " : "") + pads[i];
+    r.Info("Connected controllers", pads.empty() ? std::string("None") : list);
+    r.SliderInt("Vibration", "How strongly the controller rumbles. 0% switches it off.", "vibration", 100, 0, 100, 10,
+                "%d%%");
+    r.SliderInt("Stick deadzone", "How far a stick moves before the game notices. Raise it if a worn stick drifts.",
+                "deadzone", 10, 0, 50, 1, "%d%%");
+  }});
+  s.push_back({"Audio", [](Rows& r) {
+    r.SliderInt("Volume", "The game's overall volume.", "volume", 100, 0, 100, 5, "%d%%");
+    r.Choice("Sound delay", "How much sound is buffered ahead. Low lines sound up best with the picture; Safe rides "
+             "out stutters on slow or busy PCs without crackling.", "audio_latency", "low",
+             {{"low", "Low"}, {"normal", "Normal"}, {"safe", "Safe"}});
+    r.Toggle("High quality audio", "Smoother resampling of the PlayStation's sound chip, for a little more CPU.",
+             "spu_hq", false);
+  }});
+  AddSharedSections(app, g, s);
   return s;
 }
 
-const char* kGameSectionNames[] = {"Display",      "Graphics",          "Controller", "Keyboard and mouse", "Audio",
-                                   "Achievements", "Saves and install", "Updates",    "About"};
+std::vector<Section> SectionsFor(App& app, int g) {
+  return IsPsx(Games()[g]) ? PsxGameSections(app, g) : GameSections(app, g);
+}
 
 }  // namespace
 
-int FindGameSection(const char* name) {
-  int index = 0;
-  for (const char* s : kGameSectionNames) {
-    if (std::string_view(s) == "Controller" && !Project().features.controller_options) continue;  // not shown
-    if (std::string(s) == name) return index;
-    ++index;
-  }
+int FindGameSection(App& app, int game, const char* name) {
+  const std::vector<Section> sections = SectionsFor(app, game);
+  for (size_t i = 0; i < sections.size(); ++i)
+    if (std::string_view(sections[i].name) == name) return int(i);
   return -1;
 }
 
 void DrawGameSettings(App& app, int g) {
   GameUi& gu = app.game_ui(g);
-  const std::vector<Section> sections = GameSections(app, g);
+  const std::vector<Section> sections = SectionsFor(app, g);
   if (SettingsScreen(gu.settings_view, {Games()[g].title, "Settings"}, sections, gu.settings.get(),
                      app.art().Blur(g)))
     app.OpenHub(g);

@@ -104,7 +104,7 @@ Every field is described in [`include/trg/hub.h`](include/trg/hub.h). In short:
 | `version` | `PROJECT_VERSION` | shown on Home and in Settings, compared with releases |
 | `home_line`, `about`, `made_by`, `console`, `region` | | text on Home, About and the install page |
 | `logo_png`, `logo_png_size` | `kWhoppingLogoPng` | the wordmark at the top of Home |
-| `games` | one `GameInfo` per game | everything about each game (below) |
+| `games` | one `GameInfo` per game | everything about each game (below; PlayStation games: [PlayStation games](#playstation-games)) |
 | `repo`, `packages_tag_prefix`, `launcher_zip`, `launcher_exe` | `TekRantGaming/whopping-recompilation-collection`, `packages-v`, `WhoppingCollection`, `whopping_launcher` | where updates come from and what they are called |
 | `linux_data_folder` | `whopping_collection` | the launcher's data folder on Linux |
 | `setting_prefix`, `from_launcher_flag` | `bk_`, `--bk_from_launcher=true` | the contract with the game side hooks |
@@ -134,6 +134,28 @@ CRC32, media ID and installed size. Hash the image or package you made the port 
 SHA1`, and the same with MD5; any CRC32 tool), take the version and media ID from its `default.xex` (the execution
 info header), and measure the installed `game` folder. Only the title ID is checked when a player installs, so any
 good copy of the same game works.
+
+### PlayStation games
+
+A psxrecomp port uses `InstallSource::kPsxDisc` and lists the discs it plays in `GameInfo::psx_discs` (serial,
+region, folder and the facts of the tested image). The code is recompiled from one disc's program, so each disc has
+its own build of the game in its own folder of the game's release zip, `games/<id>/<folder>/<exe>`, with its own
+`game.toml`. Muppet RaceMania Recompiled plays the USA and Europe discs this way (`usa/` and `eur/`).
+
+* **Install:** the player's `.cue` (with its tracks), or a single `.bin` or `.iso`; the disc's serial is read from
+  `SYSTEM.CNF` and checked, and the image is copied to `games/<id>/game` with a `disc.txt` naming its serial and
+  `.cue`. The disc finder offers `.cue` files of the project's discs found on the PC.
+* **Settings:** Display, Graphics, Controller and Audio rows of the psxrecomp runtime, kept in `games/<id>/<id>.toml`
+  and written to the build's `settings.toml` and `input.ini` at Play (`src/psx.cpp`). Player 1 uses a controller as
+  soon as one is switched on.
+* **Play:** the installed disc's build, with `--no-launcher --disc <cue> --memcard-dir saves/<id>`. The memory cards
+  live in `saves/<id>` beside the launcher, outside `games/<id>`, so removing the game keeps them, and every region
+  shares them.
+* **Updates** protect each build's `settings.toml`, `input.ini`, `keybinds.ini`, overlay captures and cache. Set
+  the `ProjectConfig::features` off: the psxrecomp runtime has none of the ReXGlue game side hooks.
+* There are no achievements: the game page shows the installed disc in their place.
+
+An art field can also be a full `https://` address, for a game SteamGridDB has no hero (or grid, or logo) for.
 
 ## Game art
 

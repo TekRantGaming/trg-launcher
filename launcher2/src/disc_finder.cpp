@@ -7,6 +7,7 @@
 #include <trg/xbox360.h>
 
 #include "games.h"
+#include "psx.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -51,11 +52,11 @@ void DiscFinder::Rescan() {
   Start();
 }
 
-std::vector<FoundDisc> DiscFinder::Found(uint32_t title_id) const {
+std::vector<FoundDisc> DiscFinder::Found(const GameInfo& game) const {
   std::lock_guard<std::mutex> lock(mu_);
   std::vector<FoundDisc> out;
   for (const FoundDisc& d : found_)
-    if (d.title_id == title_id) out.push_back(d);
+    if (IsPsx(game) ? !d.serial.empty() && FindPsxDisc(game, d.serial) : d.title_id == game.title_id) out.push_back(d);
   return out;
 }
 
@@ -86,6 +87,8 @@ void DiscFinder::Run() {
   roots.push_back({"/media", 3});
   roots.push_back({"/mnt", 2});
 #endif
+  bool wants_psx = false;
+  for (const GameInfo& g : Games()) wants_psx = wants_psx || IsPsx(g);
   std::vector<FoundDisc> found;
   std::vector<std::string> seen;
   for (const auto& [root, depth] : roots) {
@@ -105,13 +108,23 @@ void DiscFinder::Run() {
       }
       std::string ext = Utf8(e.path().extension());
       std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-      if (ext != ".iso") continue;
+      if (ext != ".iso" && ext != ".cue") continue;
       const std::string path = Utf8(e.path());
       if (std::find(seen.begin(), seen.end(), path) != seen.end()) continue;
       seen.push_back(path);
-      const uint32_t id = trg::ReadXbox360TitleId(path);
-      for (const GameInfo& g : Games()) {
-        if (g.title_id == id) found.push_back({path, id, static_cast<long long>(e.file_size(ec2))});
+      if (ext == ".cue") {  // PlayStation discs: the serial, if a game of the project plays it
+        if (!wants_psx) continue;
+        const std::string serial = ReadPsxSerial(path);
+        for (const GameInfo& g : Games()) {
+          if (serial.empty() || !FindPsxDisc(g, serial)) continue;
+          found.push_back({path, 0, serial, PsxImageSize(path)});
+          break;
+        }
+      } else {
+        const uint32_t id = trg::ReadXbox360TitleId(path);
+        for (const GameInfo& g : Games()) {
+          if (!IsPsx(g) && g.title_id == id) found.push_back({path, id, {}, static_cast<long long>(e.file_size(ec2))});
+        }
       }
       std::lock_guard<std::mutex> lock(mu_);
       found_ = found;

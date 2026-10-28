@@ -75,7 +75,7 @@ std::string Badge(App& app, int i) {
   switch (app.state(i)) {
     case GameState::kNotDownloaded: return "Not installed";
     case GameState::kDownloaded:
-      return Games()[i].source == InstallSource::kDisc ? "Needs your disc" : "Needs your copy";
+      return Games()[i].source != InstallSource::kPackage ? "Needs your disc" : "Needs your copy";
     default: return "";
   }
 }
@@ -268,7 +268,7 @@ void DrawHome(App& app) {
       case GameState::kNotDownloaded: line = "Not on this PC yet"; break;
       case GameState::kDownloaded:
         line = std::string("Ready") + kBullet + "Play asks for your " +
-               (game.source == InstallSource::kDisc ? "disc image" : "copy of the game") + " the first time";
+               (game.source != InstallSource::kPackage ? "disc image" : "copy of the game") + " the first time";
         break;
       case GameState::kInstalled: {
         line = app.running_game() == g ? "Playing now" : "Ready to play";

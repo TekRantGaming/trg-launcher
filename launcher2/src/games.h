@@ -34,9 +34,9 @@ std::string LauncherDir();  // where it writes: its folder on Windows, XDG_DATA_
 void SetOutput(trg::SettingsStore& st, const GameInfo& game, int width, int height, bool only_if_missing = false);
 std::string GameDir(const GameInfo& game);       // games/<id>: the program files from the release
 std::string GameDataDir(const GameInfo& game);   // games/<id>/game: the files from the player's copy
-std::string GameExePath(const GameInfo& game);
+std::string GameExePath(const GameInfo& game);  // a PlayStation port: the installed disc's build (psx.h)
 std::string GameSettingsPath(const GameInfo& game);  // games/<id>/<id>.toml, read by the game at start
-std::string SavesDir(const GameInfo& game);      // Documents/<id>
+std::string SavesDir(const GameInfo& game);      // Documents/<id>; a PlayStation port: saves/<id> (memory cards)
 std::string BackupsDir(const GameInfo& game);    // save-backups/<id>
 std::string CacheDir();                          // cache (art)
 

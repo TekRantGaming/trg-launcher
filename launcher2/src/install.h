@@ -40,11 +40,12 @@ struct GameJobs {
 void StartDownload(const GameInfo& game, GameJobs& jobs, bool quiet = false);
 // Startup check: finds out whether a newer release exists, installs nothing.
 void StartUpdateCheck(const GameInfo& game, GameJobs& jobs);
-// Copies the game's files from the player's copy into the game folder after checking its title ID: a disc image
-// or a package, as the game's InstallSource says.
+// Copies the game's files from the player's copy into the game folder after checking its title ID (a PlayStation
+// disc's serial): a disc image or a package, as the game's InstallSource says.
 void StartInstall(const GameInfo& game, const std::string& path, GameJobs& jobs);
 void StartDiscInstall(const GameInfo& game, const std::string& image, GameJobs& jobs);
 void StartPackageInstall(const GameInfo& game, const std::string& path, GameJobs& jobs);
+void StartPsxDiscInstall(const GameInfo& game, const std::string& path, GameJobs& jobs);
 // Call each frame: collects a finished job's result into jobs.message.
 // Returns true on the frame a job finished.
 bool PollJobs(const GameInfo& game, GameJobs& jobs);

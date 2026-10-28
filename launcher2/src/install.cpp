@@ -6,6 +6,7 @@
 #include <trg/xbox360.h>
 
 #include "package.h"
+#include "psx.h"
 
 namespace trg::hub {
 namespace fs = std::filesystem;
@@ -25,6 +26,15 @@ trg::UpdaterConfig GameUpdaterConfig(const GameInfo& game) {
   // Never written or deleted by an update: the game files from the player's copy, the settings the
   // launcher keeps for the game, logs and crash reports.
   c.protected_paths = {"game", std::string(game.id) + ".toml", "logs", "fpe.log"};
+  if (IsPsx(game)) {
+    // One build per disc in its own folder: update-files.txt at the top marks the release's root. Each build keeps
+    // the runtime's settings, input maps and what it learns while it runs (overlay captures, shader cache).
+    c.program_name.clear();
+    for (const PsxDisc& d : game.psx_discs)
+      for (const char* name : {"settings.toml", "input.ini", "keybinds.ini", "overlay_captures.json",
+                               "overlay_captures.json.d", "cache", "saves"})
+        c.protected_paths.push_back(std::string(d.folder) + "/" + name);
+  }
   c.work_dir = LauncherDir() + "/cache/downloads/" + game.id;
   c.state_file = GameDir(game) + "/update-state.txt";
   return c;
@@ -42,7 +52,9 @@ std::string DescribeTitleId(uint32_t title_id, InstallSource source) {
 }
 
 void StartInstall(const GameInfo& game, const std::string& path, GameJobs& jobs) {
-  if (game.source == InstallSource::kPackage)
+  if (IsPsx(game))
+    StartPsxDiscInstall(game, path, jobs);
+  else if (game.source == InstallSource::kPackage)
     StartPackageInstall(game, path, jobs);
   else
     StartDiscInstall(game, path, jobs);
@@ -160,6 +172,19 @@ void StartPackageInstall(const GameInfo& game, const std::string& path, GameJobs
     fs::rename(fs::u8path(staging), fs::u8path(out_dir), ec);
     if (ec) return "The files were copied, but the game folder could not be finished: " + ec.message();
     return std::string();
+  });
+}
+
+// From Muppet RaceMania Recompiled (PlayStation discs, psx.h).
+void StartPsxDiscInstall(const GameInfo& game, const std::string& path, GameJobs& jobs) {
+  if (jobs.task.running()) return;
+  jobs.kind = GameJobs::Kind::kInstall;
+  jobs.message.clear();
+  jobs.message_is_error = false;
+  const std::string out_dir = GameDataDir(game);
+  const GameInfo* g = &game;  // the project's games live for the whole run
+  jobs.task.Start("Checking the disc image", [g, path, out_dir](trg::Task& task) {
+    return InstallPsxDisc(task, *g, path, out_dir);
   });
 }
 

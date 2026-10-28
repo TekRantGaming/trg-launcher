@@ -183,7 +183,7 @@ void DrawProjects(App& app);  // projects_screen.cpp
 void DrawHub(App& app, int game);
 void FocusHubPlay();
 void DrawGameSettings(App& app, int game);
-int FindGameSection(const char* name);  // -1 when there is no such section
+int FindGameSection(App& app, int game, const char* name);  // -1 when the game has no such section
 void DrawInstall(App& app, int game);
 void DrawCollection(App& app);
 

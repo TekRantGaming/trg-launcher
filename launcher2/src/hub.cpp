@@ -9,6 +9,7 @@
 #include <trg/platform.h>
 
 #include "app.h"
+#include "psx.h"
 #include "sounds.h"
 
 namespace trg::hub {
@@ -70,6 +71,24 @@ void AchievementsCard(App& app, int g, ImVec2 a, ImVec2 b) {
   }
   Bar(ImVec2(a.x + 18 * f.s, b.y - 26 * f.s), ImVec2(b.x - 18 * f.s, b.y - 20 * f.s),
       total ? float(ach.unlocked) / float(total) : 0.0f, White());
+}
+
+// A PlayStation port has no achievements: the card shows the installed disc instead.
+void DiscCard(App& app, int g, ImVec2 a, ImVec2 b) {
+  const Frame& f = F();
+  Card(a, b);
+  const GameInfo& game = Games()[g];
+  const InstalledPsx installed = InstalledPsxDisc(game);
+  if (!installed.disc) {
+    CardTitle(a, "Your disc", "Not yet");
+    Text(f.regular, 14, ImVec2(a.x + 18 * f.s, a.y + 80 * f.s), White(0.6f), "Play asks for your disc image.");
+    return;
+  }
+  CardTitle(a, "Your disc", installed.disc->region);
+  Text(f.regular, 14, ImVec2(a.x + 18 * f.s, a.y + 80 * f.s), White(0.6f),
+       std::string(installed.disc->serial) + kBullet + "memory cards are shared by every region",
+       (b.x - a.x) / f.s - 36);
+  (void)app;
 }
 
 void NewsCard(App& app, int g, ImVec2 a, ImVec2 b) {
@@ -169,7 +188,7 @@ void DrawHub(App& app, int g) {
       case GameState::kNotDownloaded: line = "Not on this PC yet. Download gets the newest version."; break;
       case GameState::kDownloaded:
         line = (v.empty() ? std::string("Ready") : "Version " + v) + kBullet +
-               "Play asks for your " + (game.source == InstallSource::kDisc ? "disc image" : "copy of the game") +
+               "Play asks for your " + (game.source != InstallSource::kPackage ? "disc image" : "copy of the game") +
                " the first time";
         break;
       case GameState::kInstalled:
@@ -187,7 +206,10 @@ void DrawHub(App& app, int g) {
   const ImVec2 ca[3] = {ImVec2(f.X(48), top), ImVec2(f.X(48) + w0 + 14 * f.s, top),
                         ImVec2(f.X(48) + w0 + w1 + 28 * f.s, top)};
   const ImVec2 cb[3] = {ImVec2(ca[0].x + w0, bottom), ImVec2(ca[1].x + w1, bottom), ImVec2(ca[2].x + w1, bottom)};
-  AchievementsCard(app, g, ca[0], cb[0]);
+  if (IsPsx(game))
+    DiscCard(app, g, ca[0], cb[0]);
+  else
+    AchievementsCard(app, g, ca[0], cb[0]);
   NewsCard(app, g, ca[1], cb[1]);
   SavesCard(app, g, ca[2], cb[2]);
   for (int i = 0; i < 3; ++i) {
@@ -208,7 +230,7 @@ void DrawHub(App& app, int g) {
     case 0: app.PrimaryAction(g); break;
     case 1: app.OpenGameSettings(g); break;
     case 2: app.OpenGameSettings(g, "Saves and install"); break;
-    case 3: app.OpenGameSettings(g, "Achievements"); break;
+    case 3: app.OpenGameSettings(g, IsPsx(game) ? "Saves and install" : "Achievements"); break;
     case 4: trg::OpenUrl(std::string("https://github.com/") + Project().repo + "/releases"); break;
     case 5: app.OpenGameSettings(g, "Saves and install"); break;
     default: break;

@@ -25,6 +25,25 @@ enum class InstallSource {
   kDisc,     // an Xbox 360 disc image (.iso); its title ID is checked, then the disc is extracted
   kPackage,  // an Xbox Live Arcade package (the file in Content/<profile>/<title ID>/000D0000), or a folder it was
              // extracted to; the full game is always unlocked by the game's port, not here
+  kPsxDisc,  // a PlayStation disc image (.cue with its .bin tracks, or a single .bin or .iso) for a psxrecomp port; its
+             // serial is checked against GameInfo::psx_discs, then the image is copied (see PsxDisc)
+};
+
+// A PlayStation disc a psxrecomp port plays (InstallSource::kPsxDisc). The code is recompiled from one disc's
+// program, so each disc (each region) has its own build of the game, in its own folder of the game's release zip:
+// games/<id>/<folder>/<GameInfo::exe>, with its own game.toml beside it. The launcher starts the build for the disc
+// the player installed, writes its settings.toml from the launcher's settings, and keeps the memory cards in
+// saves/<id> beside the launcher, shared by every region.
+struct PsxDisc {
+  const char* serial;     // "SLUS-01237": from the disc's SYSTEM.CNF (BOOT = cdrom:\SLUS_012.37;1)
+  const char* region;     // "USA"
+  const char* folder;     // "usa": the build's folder inside games/<id>
+  // The copy the port was made with, shown on the install page and the About section. Only the serial is checked.
+  const char* copy_name;  // "Muppet RaceMania (USA).cue"
+  const char* copy_size;  // the data track's size: "506,830,128 bytes"
+  const char* copy_sha1;  // of the data track (.bin)
+  const char* copy_md5;
+  const char* copy_crc32;
 };
 
 struct GameInfo {
@@ -36,7 +55,8 @@ struct GameInfo {
   ImVec4 accent;           // the game's colour, used until its art arrives
   const char* tagline;     // one line under the title on its page
   InstallSource source;
-  // Art from SteamGridDB's image server: the part after https://cdn2.steamgriddb.com/ ("grid/<hash>.png").
+  // Art from SteamGridDB's image server: the part after https://cdn2.steamgriddb.com/ ("grid/<hash>.png"), or a full
+  // https:// address (an image in the project's repository, when SteamGridDB has none of that kind).
   int steamgriddb_id;      // https://www.steamgriddb.com/game/<id>: art is cached under this number
   const char* art_grid;    // 600 x 900 portrait card
   const char* art_hero;    // 1920 x 620 background
@@ -58,7 +78,14 @@ struct GameInfo {
   // for them, separated by commas ("720,1080"); nullptr: 720 only. Other sizes use the runtime's draw scale. (The
   // game side must then keep the video mode the launcher writes; shared/render_quality.cpp sets 1280 x 720.)
   const char* native_heights = nullptr;
+  // InstallSource::kPsxDisc: the discs the port plays, one build each (title_id, media_id and the copy_* facts above
+  // are not used). From Muppet RaceMania Recompiled.
+  std::vector<PsxDisc> psx_discs = {};
 };
+
+// A psxrecomp port (InstallSource::kPsxDisc): the PlayStation settings, install and start apply, and it has no
+// achievements.
+inline bool IsPsx(const GameInfo& game) { return game.source == InstallSource::kPsxDisc; }
 
 // A tile on the Other TRG Projects page. Art links are full URLs (usually SteamGridDB); "" draws a plain card.
 struct OtherProject {

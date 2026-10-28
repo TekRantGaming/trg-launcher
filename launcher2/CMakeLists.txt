@@ -33,6 +33,7 @@ add_library(trg_launcher2 STATIC
   src/saves.cpp
   src/projects.cpp
   src/projects_screen.cpp
+  src/psx.cpp
   src/settings_screen.cpp
   src/sounds.cpp
   src/steam_button.cpp

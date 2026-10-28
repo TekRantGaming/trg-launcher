@@ -2,6 +2,7 @@
 
 #include "discord_icon.inc"
 #include "steam_icon.inc"
+#include "psx.h"
 #include "sounds.h"
 
 #include <filesystem>
@@ -205,7 +206,7 @@ void App::OpenGameSettings(int game, const char* section) {
   gu.achievements.loaded = false;  // read again: the game may have unlocked some since
   gu.settings_view.in_rows = false;
   if (section) {
-    const int s = FindGameSection(section);
+    const int s = FindGameSection(*this, game, section);
     if (s >= 0) {
       gu.settings_view.section = s;
       gu.settings_view.in_rows = true;
@@ -257,7 +258,9 @@ void App::PrimaryAction(int game) {
 }
 
 void App::Play(int game) {
-  if (launcher_settings_->GetBool("return_note_seen", false)) {
+  // Only games with the return hook (from_launcher_flag) can be left with Back and Start; the others are closed.
+  const bool can_return = !Project().from_launcher_flag.empty() && !IsPsx(Games()[game]);
+  if (!can_return || launcher_settings_->GetBool("return_note_seen", false)) {
     LaunchGame(game);
     return;
   }
@@ -322,6 +325,21 @@ bool App::LaunchGame(int game) {
     return false;
   }
   const GameInfo& g = Games()[game];
+  if (IsPsx(g)) {
+    // The installed disc's build, with that disc and the shared memory cards; its settings.toml from the launcher.
+    const InstalledPsx installed = InstalledPsxDisc(g);
+    if (!installed.disc) {
+      OpenInstall(game);
+      return false;
+    }
+    const std::string dir = PsxBuildDir(g, *installed.disc);
+    std::error_code ec;
+    fs::create_directories(fs::u8path(SavesDir(g)), ec);
+    if (!WritePsxRuntimeSettings(g, *games_[game]->settings, dir))
+      SetToast("The game's settings could not be written; it starts with the ones it had.", true);
+    return Launch(PsxExePath(g, *installed.disc), dir,
+                  {"--no-launcher", "--disc", installed.cue, "--memcard-dir", SavesDir(g)}, g.title, game);
+  }
   std::vector<std::string> args = {"--game_data_root=" + GameDataDir(g)};
   // Back and Start, or holding Esc, closes the game (game_side/return_to_launcher.cpp).
   if (!Project().from_launcher_flag.empty()) args.push_back(Project().from_launcher_flag);
@@ -344,9 +362,12 @@ bool App::Launch(const std::string& exe, const std::string& dir_utf8, const std:
                  const std::string& title, int index) {
 #if defined(_WIN32)
   std::wstring cmd = L"\"" + Wide(exe) + L"\"";
-  for (const std::string& a : args) {  // --name=value: the value in quotes (paths with spaces)
-    const size_t eq = a.find('=');
-    cmd += eq == std::string::npos ? L" " + Wide(a) : L" " + Wide(a.substr(0, eq + 1)) + L"\"" + Wide(a.substr(eq + 1)) + L"\"";
+  for (const std::string& a : args) {  // --name=value: the value in quotes; any other argument with a space in quotes
+    const size_t eq = a.rfind("--", 0) == 0 ? a.find('=') : std::string::npos;
+    if (eq != std::string::npos)
+      cmd += L" " + Wide(a.substr(0, eq + 1)) + L"\"" + Wide(a.substr(eq + 1)) + L"\"";
+    else
+      cmd += a.find(' ') == std::string::npos ? L" " + Wide(a) : L" \"" + Wide(a) + L"\"";
   }
   std::wstring dir = Wide(dir_utf8);
   STARTUPINFOW si{};

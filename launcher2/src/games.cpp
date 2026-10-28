@@ -7,6 +7,8 @@
 #include <trg/settings.h>
 #include <trg/updater.h>
 
+#include "psx.h"
+
 #include <SDL.h>
 
 #if defined(_WIN32)
@@ -123,7 +125,14 @@ void SetOutput(trg::SettingsStore& st, const GameInfo& game, int width, int heig
 std::string GameDir(const GameInfo& game) { return LauncherDir() + "/games/" + game.id; }
 std::string GameDataDir(const GameInfo& game) { return GameDir(game) + "/game"; }
 #if defined(_WIN32)
-std::string GameExePath(const GameInfo& game) { return GameDir(game) + "/" + game.exe; }
+std::string GameExePath(const GameInfo& game) {
+  // A PlayStation port has a build per disc: the installed disc's, else the first (the download's marker).
+  if (IsPsx(game) && !game.psx_discs.empty()) {
+    const InstalledPsx installed = InstalledPsxDisc(game);
+    return PsxExePath(game, installed.disc ? *installed.disc : game.psx_discs.front());
+  }
+  return GameDir(game) + "/" + game.exe;
+}
 std::string GameSettingsPath(const GameInfo& game) { return GameDir(game) + "/" + game.id + ".toml"; }
 #else
 // The games come inside the AppImage, beside the launcher, without ".exe"; each reads its settings from its user
@@ -139,6 +148,8 @@ std::string BackupsDir(const GameInfo& game) { return LauncherDir() + "/save-bac
 std::string CacheDir() { return LauncherDir() + "/cache"; }
 
 std::string SavesDir(const GameInfo& game) {
+  // PlayStation memory cards: beside the launcher, outside games/<id> so removing the game keeps them.
+  if (IsPsx(game)) return LauncherDir() + "/saves/" + game.id;
 #if defined(_WIN32)
   PWSTR docs = nullptr;
   std::string out;
@@ -155,6 +166,7 @@ std::string SavesDir(const GameInfo& game) {
 GameState DetectState(const GameInfo& game) {
   std::error_code ec;
   if (!fs::exists(PathOf(GameExePath(game)), ec)) return GameState::kNotDownloaded;
+  if (IsPsx(game)) return InstalledPsxDisc(game).disc ? GameState::kInstalled : GameState::kDownloaded;
   if (!fs::exists(PathOf(GameDataDir(game) + "/default.xex"), ec)) return GameState::kDownloaded;
   return GameState::kInstalled;
 }

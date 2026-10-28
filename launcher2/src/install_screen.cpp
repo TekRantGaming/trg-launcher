@@ -24,6 +24,7 @@
 #include <trg/platform.h>
 
 #include "app.h"
+#include "psx.h"
 
 namespace trg::hub {
 namespace {
@@ -102,7 +103,8 @@ class PickerEvents : public IFileDialogEvents {
   std::atomic<ULONG> refs_{1};
 };
 
-std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool folder) {
+std::string ShowPicker(HWND owner, const std::wstring& title, InstallSource source, bool folder) {
+  const bool package = source == InstallSource::kPackage;
   const HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   std::string out;
   IFileOpenDialog* dlg = nullptr;
@@ -110,9 +112,13 @@ std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool
     const COMDLG_FILTERSPEC discs[] = {{L"Xbox 360 disc images (*.iso)", L"*.iso"}, {L"All files", L"*.*"}};
     // Packages have no file name extension, so every file is shown.
     const COMDLG_FILTERSPEC packages[] = {{L"Xbox 360 game packages (all files)", L"*.*"}};
+    const COMDLG_FILTERSPEC psx[] = {{L"PlayStation disc images (*.cue, *.bin, *.iso)", L"*.cue;*.bin;*.iso"},
+                                     {L"All files", L"*.*"}};
     if (!folder) {
       if (package)
         dlg->SetFileTypes(1, packages);
+      else if (source == InstallSource::kPsxDisc)
+        dlg->SetFileTypes(2, psx);
       else
         dlg->SetFileTypes(2, discs);
     }
@@ -148,7 +154,7 @@ std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool
 #endif
 
 void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool folder = false) {
-  const bool package = Games()[game].source == InstallSource::kPackage;
+  const InstallSource source = Games()[game].source;
   {
     std::lock_guard<std::mutex> lock(g_picker.mu);
     if (g_picker.open) return;
@@ -168,8 +174,8 @@ void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool fold
   std::wstring wtitle(size_t(std::max(n, 1)), L'\0');
   MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, wtitle.data(), n);
   wtitle.resize(wcslen(wtitle.c_str()));
-  std::thread([hwnd, wtitle, package, folder] {
-    std::string path = ShowPicker(hwnd, wtitle, package, folder);
+  std::thread([hwnd, wtitle, source, folder] {
+    std::string path = ShowPicker(hwnd, wtitle, source, folder);
     std::lock_guard<std::mutex> lock(g_picker.mu);
     g_picker.path = std::move(path);
     g_picker.open = false;
@@ -179,8 +185,10 @@ void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool fold
 #else
   (void)owner;
   (void)folder;
-  std::string path = package ? trg::BrowseForFile(title, {{"Xbox 360 game packages", "*"}})
-                             : trg::BrowseForFile(title, {{"Xbox 360 disc images", "*.iso"}});
+  std::string path = source == InstallSource::kPackage ? trg::BrowseForFile(title, {{"Xbox 360 game packages", "*"}})
+                     : source == InstallSource::kPsxDisc
+                         ? trg::BrowseForFile(title, {{"PlayStation disc images", "*.cue *.bin *.iso"}})
+                         : trg::BrowseForFile(title, {{"Xbox 360 disc images", "*.iso"}});
   std::lock_guard<std::mutex> lock(g_picker.mu);
   g_picker.path = std::move(path);
   g_picker.open = false;
@@ -204,7 +212,48 @@ void PickerToFront() {
 #endif
 }
 
+// A PlayStation port's discs: each one's region, serial and the facts of the image the port was made with.
+void PsxCopyCard(const GameInfo& game, ImVec2 a, float w) {
+  const Frame& f = F();
+  const ProjectConfig& p = Project();
+  std::vector<std::pair<std::string, std::string>> lines = {{"Game", game.title}};
+  if (!p.made_by.empty()) lines.push_back({"Made by", p.made_by});
+  if (!p.console.empty()) lines.push_back({"Console", p.console});
+  for (const PsxDisc& d : game.psx_discs) {
+    lines.push_back({"", ""});
+    lines.push_back({std::string(d.region) + " disc", d.serial});
+    lines.push_back({"Tested image", d.copy_name});
+    lines.push_back({"Track size", d.copy_size});
+    lines.push_back({"SHA1", d.copy_sha1});
+    lines.push_back({"CRC32", d.copy_crc32});
+  }
+  const float line_h = 25 * f.s;
+  float h = 58 * f.s + 64 * f.s;
+  for (const auto& l : lines) h += l.first.empty() ? line_h * 0.4f : line_h;
+  const ImVec2 b(a.x + w, a.y + h);
+  Card(a, b, 0.08f);
+  Text(f.semibold, 17, ImVec2(a.x + 20 * f.s, a.y + 18 * f.s), White(),
+       game.psx_discs.size() == 1 ? "Supported disc" : "Supported discs");
+  float y = a.y + 52 * f.s;
+  for (const auto& [label, value] : lines) {
+    if (label.empty()) {
+      y += line_h * 0.4f;
+      continue;
+    }
+    Text(f.regular, 13, ImVec2(a.x + 20 * f.s, y), White(0.55f), label);
+    float size = 13;
+    while (size > 9 && TextSize(f.regular, size, value).x > (w - 150) * f.s) size -= 0.5f;
+    TextRight(f.regular, size, ImVec2(b.x - 20 * f.s, y + (13 - size) * 0.5f * f.s), White(0.92f), value);
+    y += line_h;
+  }
+  Text(f.regular, 12, ImVec2(a.x + 20 * f.s, y + 8 * f.s), White(0.5f),
+       "Make the image (.cue and .bin) from your own disc. Another good dump of a supported disc works too, as only "
+       "its serial is checked.",
+       w / f.s - 40);
+}
+
 void CopyCard(const GameInfo& game, ImVec2 a, float w) {
+  if (IsPsx(game)) return PsxCopyCard(game, a, w);
   const Frame& f = F();
   const ProjectConfig& p = Project();
   const bool disc = game.source == InstallSource::kDisc;
@@ -308,7 +357,8 @@ void DrawInstall(App& app, int g) {
       }
     }
   }
-  if (PollJobs(game, u.jobs)) {
+  // Only the install's own result: a download or the quiet startup update check finishes in App::Idle as usual.
+  if (u.jobs.kind == GameJobs::Kind::kInstall && PollJobs(game, u.jobs)) {
     app.RefreshStates();
     if (!u.jobs.message_is_error && u.jobs.message != "Cancelled.") {
       app.SetToast(u.jobs.message);
@@ -339,30 +389,45 @@ void DrawInstall(App& app, int g) {
     } else if (game.source == InstallSource::kPackage) {
       PackageRows(app, g, r);
     } else {
-      r.Paragraph("This recompilation plays the original Xbox 360 game, so it needs a disc image (.iso) that you made "
-                  "from your own " + std::string(game.title) + " disc. The game's files are copied from it. Nothing "
-                  "from the game comes with the launcher.");
+      if (IsPsx(game)) {
+        std::string regions;
+        for (size_t i = 0; i < game.psx_discs.size(); ++i)
+          regions += std::string(i == 0 ? "" : i + 1 == game.psx_discs.size() ? " or " : ", ") + game.psx_discs[i].region;
+        r.Paragraph("This recompilation plays the original PlayStation game, so it needs a disc image (.cue and .bin) "
+                    "that you made from your own " + std::string(game.title) + " disc (" + regions + "). It is copied "
+                    "into the game's folder. Nothing from the game comes with the launcher.");
+      } else {
+        r.Paragraph("This recompilation plays the original Xbox 360 game, so it needs a disc image (.iso) that you made "
+                    "from your own " + std::string(game.title) + " disc. The game's files are copied from it. Nothing "
+                    "from the game comes with the launcher.");
+      }
       if (u.jobs.message_is_error && !u.jobs.message.empty()) r.Paragraph(u.jobs.message, false);
       app.discs().Start();
-      for (const FoundDisc& d : app.discs().Found(game.title_id)) {
+      for (const FoundDisc& d : app.discs().Found(game)) {
         char size[32];
-        std::snprintf(size, sizeof size, "%.1f GB", double(d.size) / (1024.0 * 1024.0 * 1024.0));
-        const std::string name = std::filesystem::u8path(d.path).filename().u8string();
+        if (d.size < 1024LL * 1024 * 1024)
+          std::snprintf(size, sizeof size, "%.0f MB", double(d.size) / (1024.0 * 1024.0));
+        else
+          std::snprintf(size, sizeof size, "%.1f GB", double(d.size) / (1024.0 * 1024.0 * 1024.0));
+        std::string name = std::filesystem::u8path(d.path).filename().u8string();
+        if (const PsxDisc* pd = d.serial.empty() ? nullptr : FindPsxDisc(game, d.serial))
+          name += std::string("  (") + pd->region + ")";
         if (r.Button(name, "Found on this PC: " + d.path + "  (" + size + ")", "Install")) {
           u.disc_path = d.path;
           StartInstall(game, d.path, u.jobs);
         }
       }
       if (app.discs().running())
-        r.Paragraph(app.discs().Found(game.title_id).empty() ? "Looking for your disc image on this PC..."
-                                                             : "Still looking for others...");
-      else if (app.discs().Found(game.title_id).empty())
+        r.Paragraph(app.discs().Found(game).empty() ? "Looking for your disc image on this PC..."
+                                                    : "Still looking for others...");
+      else if (app.discs().Found(game).empty())
         r.Paragraph("No disc image of this game was found on this PC. Choose it yourself below.");
       if (PickerOpen()) {
         r.Paragraph("Choose your disc image in the file window that opened.");
         if (r.Button("Show the file window", "Brings the file window to the front, in case it opened behind."))
           PickerToFront();
-      } else if (r.Button("Choose disc image", "Pick the .iso file, or drop it on this window.")) {
+      } else if (r.Button("Choose disc image", IsPsx(game) ? "Pick the .cue file (with its .bin beside it), or drop "
+                          "it on this window." : "Pick the .iso file, or drop it on this window.")) {
         OpenPicker(app.window(), g, "Choose your " + std::string(game.title) + " disc image");
       }
       if (!app.discs().running() && r.Button("Search again", "Looks through this PC for disc images again."))

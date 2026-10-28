@@ -2,7 +2,7 @@
 // (cdn2.steamgriddb.com), which serves each image to anyone without an API key.
 // Each game's images are picked on its SteamGridDB page and named in its
 // GameInfo (art_grid, art_hero, art_logo: the part of the image's address after
-// cdn2.steamgriddb.com/). The result is cached (art.h), so each image is
+// cdn2.steamgriddb.com/, or a full https:// address). The result is cached (art.h), so each image is
 // downloaded once. See launcher2/README.md, "Game art".
 
 #include <string>
@@ -26,7 +26,9 @@ std::string FetchArt(int steamgriddb_id, ArtKind kind, std::string& bytes, std::
     const std::string p = path;
     const size_t dot = p.rfind('.');
     ext = dot == std::string::npos ? ".img" : p.substr(dot);
-    return trg::HttpGet("https://cdn2.steamgriddb.com/" + p, bytes);
+    // A full address (an image in the project's own repository, for a game SteamGridDB has no such image of).
+    const bool full = p.rfind("https://", 0) == 0;
+    return trg::HttpGet(full ? p : "https://cdn2.steamgriddb.com/" + p, bytes);
   }
   return "no art for this game";
 }
