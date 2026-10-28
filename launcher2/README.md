@@ -109,13 +109,23 @@ Every field is described in [`include/trg/hub.h`](include/trg/hub.h). In short:
 | `linux_data_folder` | `whopping_collection` | the launcher's data folder on Linux |
 | `setting_prefix`, `from_launcher_flag` | `bk_`, `--bk_from_launcher=true` | the contract with the game side hooks |
 | `test_background_env`, `release_server_env` | `BK_TEST_BACKGROUND`, `WHOPPING_RELEASE_SERVER` | test runs (below) |
-| `features` | all on | rows that need game side hooks |
+| `features` | all on | rows that need game side hooks, and `output_resolution` (below) |
 | `discord_url`, `steam_art_base`, `other_projects` | | Home's tiles; an empty value hides its tile |
 
 A `GameInfo` holds the game's `id` (its folder, settings and save folder name, and the ReXGlue app name), title,
 exe, release zip name, Xbox 360 title ID, colour and tagline, its `InstallSource` (`kDisc` or `kPackage`), its art,
 the facts of the copy the port was made with, and `own_mouse_look` for a game whose own hook turns the camera with
 the mouse.
+
+### Resolution
+
+Display has one **Resolution** row (Your screen, 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160; 1920 × 1080 by
+default) instead of separate Window size and Render resolution rows: the size the game is drawn at and shown, and the
+size of its window when windowed. The launcher writes it as `window_width`/`window_height`, the guest video mode and
+`resolution_scale` (the draw scale from 720p, or the game's own video mode for the heights in
+`GameInfo::native_heights`), and before the first Play too. The upscaler modes scale from it as well, in the launcher's
+text and in `game_side/shared/render_quality.cpp`. Set `features.output_resolution = false` for the two separate rows.
+From Angry Birds: The Re-Hatched Collection.
 
 ### The copy's facts
 

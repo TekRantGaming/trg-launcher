@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+#include <trg/settings.h>
+
 #include <trg/hub.h>
 
 namespace trg::hub {
@@ -27,6 +29,9 @@ int GameCount();
 // keep them (Documents/<id>).
 std::string ProgramDir();   // the launcher's own folder (inside the AppImage on Linux)
 std::string LauncherDir();  // where it writes: its folder on Windows, XDG_DATA_HOME/<linux_data_folder> on Linux
+// Features::output_resolution: writes the window size and the game's video mode and draw scale for a picture
+// width x height (0 x 0: the screen's size), or, with `only_if_missing`, the default 1920 x 1080 when none is set yet.
+void SetOutput(trg::SettingsStore& st, const GameInfo& game, int width, int height, bool only_if_missing = false);
 std::string GameDir(const GameInfo& game);       // games/<id>: the program files from the release
 std::string GameDataDir(const GameInfo& game);   // games/<id>/game: the files from the player's copy
 std::string GameExePath(const GameInfo& game);

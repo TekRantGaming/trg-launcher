@@ -240,13 +240,27 @@ std::vector<Section> GameSections(App& app, int g) {
   trg::SettingsStore& st = *app.game_ui(g).settings;
   std::vector<Section> s;
 
-  s.push_back({"Display", [&st](Rows& r) {
+  s.push_back({"Display", [&st, g](Rows& r) {
     r.Choice("Window mode", "Fullscreen fills your screen. Windowed opens a window you can move and resize.",
              "fullscreen", "true", {{"true", "Fullscreen"}, {"false", "Windowed"}});
     // The windowed size: window_width and window_height together (logical pixels, so Windows display scaling
     // still applies). Not the SDK's "resolution" preset, which also changes the game's own video mode
     // (the guest stays at 1280 x 720).
-    {
+    if (Project().features.output_resolution) {
+      // One size for both: what the game draws at and shows, and the window's size when windowed.
+      static const int sizes[][2] = {{0, 0}, {1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+      static const std::vector<std::string> names = {"Your screen", "1280 \xC3\x97 720", "1920 \xC3\x97 1080",
+                                                     "2560 \xC3\x97 1440", "3840 \xC3\x97 2160"};
+      const int w = st.GetInt("window_width", 1920), h = st.GetInt("window_height", 1080);
+      int cur = -1;
+      for (int i = 0; i < int(std::size(sizes)); ++i)
+        if (sizes[i][0] == w && sizes[i][1] == h) cur = i;
+      if (r.ChoiceIndex("Resolution", "The size the game is drawn at and shown, and the size of its window when "
+                        "windowed. Higher sizes look sharper and need a faster graphics card.", cur, names, 2) &&
+          cur >= 0) {
+        SetOutput(st, Games()[g], sizes[cur][0], sizes[cur][1]);
+      }
+    } else {
       static const int sizes[][2] = {{0, 0}, {1280, 720}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
       static const std::vector<std::string> names = {"Automatic", "1280 \xC3\x97 720", "1600 \xC3\x97 900",
                                                      "1920 \xC3\x97 1080", "2560 \xC3\x97 1440", "3840 \xC3\x97 2160"};
@@ -287,8 +301,11 @@ std::vector<Section> GameSections(App& app, int g) {
     // the render scale from the screen when the game starts (game_side/render_quality.cpp); with the upscaler
     // off the render resolution is chosen directly. Without that hook only the upscaler and the resolution show.
     const bool modes = Project().features.render_quality;
-    if (r.Choice("Upscaler", "Scales the picture up to your screen. AMD FSR 1 works on any graphics card, NVIDIA NIS "
-                 "suits NVIDIA cards. Off draws at the render resolution you choose.", "present_effect", "bilinear",
+    if (r.Choice("Upscaler", std::string("Scales the picture up to your screen. AMD FSR 1 works on any graphics card, "
+                 "NVIDIA NIS suits NVIDIA cards. Off draws at the ") +
+                 (Project().features.output_resolution ? "resolution chosen under Display."
+                                                       : "render resolution you choose."),
+                 "present_effect", "bilinear",
                  {{"bilinear", "Off"}, {"fsr", "AMD FSR 1"}, {"nis", "NVIDIA NIS"}})) {
       const bool on = st.Get("present_effect", "bilinear") != "bilinear";
       if (modes && on && st.Get(K("render_quality"), "custom") == "custom") st.Set(K("render_quality"), "quality");
@@ -297,9 +314,14 @@ std::vector<Section> GameSections(App& app, int g) {
     }
     if (modes && st.Get("present_effect", "bilinear") != "bilinear") {
       SDL_DisplayMode dm{};
-      const int screen_h = SDL_GetDesktopDisplayMode(0, &dm) == 0 ? dm.h : 1080;
+      int screen_h = SDL_GetDesktopDisplayMode(0, &dm) == 0 ? dm.h : 1080;
+      // With the Resolution row the modes scale from the chosen resolution (game side render_quality.cpp does the
+      // same), the screen only for "Your screen".
+      const bool chosen = Project().features.output_resolution && st.GetInt("window_height", 0) > 0;
+      if (chosen) screen_h = st.GetInt("window_height", 0);
       const int scale = RenderScaleFor(st.Get(K("render_quality"), "quality"), screen_h);
-      const std::string draws = scale > 0 ? "On your " + std::to_string(screen_h) + "p screen the game draws at " +
+      const std::string draws = scale > 0 ? (chosen ? "At " : "On your ") + std::to_string(screen_h) +
+                                                (chosen ? "p the game draws at " : "p screen the game draws at ") +
                                                 std::to_string(1280 * scale) + " \xC3\x97 " +
                                                 std::to_string(720 * scale) + "."
                                           : std::string();
@@ -307,7 +329,7 @@ std::vector<Section> GameSections(App& app, int g) {
                "game draws in steps of its original 720p, so two modes can give the same size. " + draws,
                K("render_quality"), "quality",
                {{"native", "Native"}, {"quality", "Quality"}, {"balanced", "Balanced"}, {"performance", "Performance"}});
-    } else {
+    } else if (!Project().features.output_resolution) {  // with it, Display's Resolution row sets the draw size
       r.Choice("Render resolution", "Draws the game at a higher resolution for a sharper picture. Higher settings "
                "need a faster graphics card.", "resolution_scale", "1",
                {{"1", "Original (720p)"}, {"2", "2x (1440p)"}, {"3", "3x (4K)"}, {"4", "4x"}, {"5", "5x"},

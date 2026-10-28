@@ -24,7 +24,7 @@ All of them use `bk_` as their setting prefix. Rename it to your project's `sett
 | --- | --- | --- |
 | `return_to_launcher.cpp` | `bk_from_launcher` | called from the game's XInputGetState hook, so it needs an input hook (see `input_options.cpp`) |
 | `game_window.cpp` | `bk_from_launcher` | Windows only; does nothing on Linux, where the desktop brings new windows forward |
-| `render_quality.cpp` | `bk_render_quality` | upscaler modes pick a whole number render scale from the screen height (Features::render_quality) |
+| `render_quality.cpp` | `bk_render_quality` | upscaler modes pick a whole number render scale from the resolution chosen in the launcher (Features::output_resolution), or the screen height for Your screen (Features::render_quality) |
 | `achievement_toast.cpp` | `bk_achievement_toasts`, `bk_achievement_sound`, `bk_achievement_volume` | the in game pop up and a chime made in code (Features::achievement_toasts) |
 | `achievements_export.cpp` | none | needed for the launcher's Achievements section to list anything |
 

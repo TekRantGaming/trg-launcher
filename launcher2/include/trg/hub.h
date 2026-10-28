@@ -54,6 +54,10 @@ struct GameInfo {
   // The game turns its camera with the mouse itself (its own mouse look hook): its Keyboard and mouse section shows
   // <prefix>mouse_sensitivity and <prefix>mouse_invert_y instead of the runtime's mouse to stick sensitivity.
   bool own_mouse_look = false;
+  // With Features::output_resolution: the picture heights (16:9) the game draws at by itself when its video mode asks
+  // for them, separated by commas ("720,1080"); nullptr: 720 only. Other sizes use the runtime's draw scale. (The
+  // game side must then keep the video mode the launcher writes; shared/render_quality.cpp sets 1280 x 720.)
+  const char* native_heights = nullptr;
 };
 
 // A tile on the Other TRG Projects page. Art links are full URLs (usually SteamGridDB); "" draws a plain card.
@@ -76,6 +80,10 @@ struct Features {
   bool render_quality = true;      // <prefix>render_quality: upscaler modes (render_quality.cpp)
   bool controller_options = true;  // invert, camera sensitivity, deadzone, vibration, button remapping (input hook)
   bool achievement_toasts = true;  // the in game pop up and chime (achievement_toast.cpp)
+  // One Resolution row instead of Window size and Render resolution: the size the game draws at and shows (its own
+  // video mode for GameInfo::native_heights, the draw scale for the rest) and the window's size. The upscaler modes
+  // scale from it too (game_side/shared/render_quality.cpp). Off: the two separate rows.
+  bool output_resolution = true;
 };
 
 struct ProjectConfig {

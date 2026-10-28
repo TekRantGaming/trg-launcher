@@ -4,7 +4,8 @@
 //
 // bk_render_quality: custom (resolution_scale as set, the default), native,
 // quality, balanced or performance. A mode picks the whole number render
-// scale (720p steps) from the output height: scale = round(height / ratio /
+// scale (720p steps) from the output height (the launcher's Resolution row,
+// else the screen): scale = round(height / ratio /
 // 720), Performance one step below Quality where there is one. The scale is
 // set as the DEFAULT of draw_resolution_scale_x/_y, so it is never saved, and
 // a leftover resolution_scale is cleared. Runs in OnFinalizePaths: after the
@@ -74,22 +75,16 @@ void ApplyRenderQuality(rex::ui::Window* window) {
   rex::cvar::SetFlagByName("video_mode_height", "720");
 
   const std::string mode = REXCVAR_GET(bk_render_quality);
-  // Output height in physical pixels: the screen in fullscreen, else the window.
-  // The window is not sized yet here, so windowed uses the window height setting (logical units, times the
-  // Windows display scale), 720 when it is automatic.
+  // Output height: the resolution the player chose in the launcher's Resolution row (Features::output_resolution,
+  // on by default), which it writes as window_height and which counts in fullscreen too; the screen's height when it
+  // is 0 (Your screen). From Angry Birds: The Re-Hatched Collection.
+  int height = REXCVAR_QUERY(int32_t, window_height);
+  if (height <= 0) {
 #if defined(_WIN32)
-  int height = GetSystemMetrics(SM_CYSCREEN);
+    height = GetSystemMetrics(SM_CYSCREEN);
 #else
-  const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
-  int height = dm ? dm->h : 0;
-#endif
-  if (!REXCVAR_QUERY(bool, fullscreen)) {
-    const int logical = REXCVAR_QUERY(int32_t, window_height) > 0 ? REXCVAR_QUERY(int32_t, window_height) : 720;
-#if defined(_WIN32)
-    height = int(std::lround(logical * GetDpiForSystem() / 96.0));
-#else
-    const float content_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
-    height = int(std::lround(logical * (content_scale > 0 ? content_scale : 1.0f)));
+    const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    height = dm ? dm->h : 720;
 #endif
   }
   (void)window;

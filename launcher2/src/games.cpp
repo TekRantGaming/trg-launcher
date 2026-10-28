@@ -1,9 +1,13 @@
 #include "games.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 
+#include <trg/settings.h>
 #include <trg/updater.h>
+
+#include <SDL.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -61,6 +65,60 @@ std::string LauncherDir() {
   return dir;
 }
 #endif
+
+// Features::output_resolution: how a game shows a picture `height` pixels high (16:9). Its own video mode when it
+// draws at that height by itself (GameInfo::native_heights), otherwise a native height times the draw scale: an exact
+// match if there is one (the larger native height first), else the smallest size above, so the picture is drawn at
+// least as large as it is shown.
+namespace {
+
+struct OutputSize {
+  int mode_height = 720;
+  int scale = 1;
+};
+OutputSize OutputFor(const GameInfo& game, int height) {
+  std::vector<int> natives;
+  for (const char* c = game.native_heights ? game.native_heights : "720"; *c;) {
+    natives.push_back(std::atoi(c));
+    while (*c && *c != ',') ++c;
+    if (*c) ++c;
+  }
+  std::sort(natives.rbegin(), natives.rend());
+  OutputSize best{natives.back(), 1};
+  int best_h = 0;
+  for (int m : natives)
+    for (int scale = 1; scale <= 8; ++scale) {
+      const int h = m * scale;
+      if (h == height) return {m, scale};
+      const bool better = best_h < height ? h > best_h : (h >= height && h < best_h);
+      if (better) best = {m, scale}, best_h = h;
+    }
+  return best;
+}
+
+}  // namespace
+
+void SetOutput(trg::SettingsStore& st, const GameInfo& game, int width, int height, bool only_if_missing) {
+  if (only_if_missing) {
+    if (!st.Get("video_mode_height").empty()) return;
+    if (!st.Get("window_height").empty()) {  // a window size chosen before this row existed is kept
+      width = st.GetInt("window_width", 0);
+      height = st.GetInt("window_height", 0);
+    }
+  }
+  int out_h = height;
+  if (out_h == 0) {
+    SDL_DisplayMode dm{};
+    out_h = SDL_GetDesktopDisplayMode(0, &dm) == 0 ? dm.h : 1080;
+  }
+  const OutputSize o = OutputFor(game, out_h);
+  st.SetInt("window_width", width);
+  st.SetInt("window_height", height);
+  st.SetInt("video_mode_width", o.mode_height * 16 / 9);
+  st.SetInt("video_mode_height", o.mode_height);
+  st.SetInt("resolution_scale", o.scale);
+  st.Save();
+}
 
 std::string GameDir(const GameInfo& game) { return LauncherDir() + "/games/" + game.id; }
 std::string GameDataDir(const GameInfo& game) { return GameDir(game) + "/game"; }

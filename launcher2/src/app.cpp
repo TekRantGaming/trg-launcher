@@ -327,6 +327,8 @@ bool App::LaunchGame(int game) {
   if (!Project().from_launcher_flag.empty()) args.push_back(Project().from_launcher_flag);
   // Testing (--test-play): never the player's own saves in Documents, a private folder instead.
   if (options_.test_play >= 0) args.push_back("--user_data_root=" + LauncherDir() + "/test-userdata");
+  // Features::output_resolution: the default size is written before the first Play, so the game gets it too.
+  if (Project().features.output_resolution) SetOutput(*games_[game]->settings, g, 1920, 1080, true);
   return Launch(GameExePath(g), GameDir(g), args, g.title, game);
 }
 
