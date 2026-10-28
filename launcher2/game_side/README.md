@@ -35,7 +35,7 @@ find the matching function in your game before using any of it.
 
 | File | Settings it reads | What to find in your game |
 | --- | --- | --- |
-| `input_options.cpp` | `bk_invert_x`, `bk_invert_y`, `bk_stick_sensitivity`, `bk_deadzone`, `bk_vibration`, `bk_remap_<button>` | the title's XInputGetState and XInputSetState wrappers (Features::controller_options) |
+| `input_options.cpp` | `bk_invert_x`, `bk_invert_y`, `bk_stick_sensitivity`, `bk_deadzone`, `bk_vibration`, `bk_remap_<button>` | the title's XInputGetState and XInputSetState wrappers (Features::controller_options). Keep its lock around every Xam input call, and hook any other wrapper that calls one (XInputGetKeystroke): the runtime's InputSystem is not safe to call from two threads at once |
 | `frame_stats.cpp` | `bk_frame_rate`, `bk_log_fps` | the one function that calls `VdSwap`, where the game paces itself (Features::frame_rate) |
 | `mouse_look.cpp` | `bk_mouse_sensitivity`, `bk_mouse_invert_y` | the camera's stick turn (GameInfo::own_mouse_look). The playbook's Sneak King page explains how it was found |
 | `port_defaults.cpp` | none | the port's own cvar defaults, such as `readback_resolve` and the Linux render target path |
