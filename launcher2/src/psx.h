@@ -48,4 +48,14 @@ bool WritePsxRuntimeSettings(const GameInfo& game, const trg::SettingsStore& st,
 // Controllers switched on now (the Controller section lists them; Play uses the count for player 2).
 std::vector<std::string> ConnectedControllers();
 
+// The launcher setting that holds a game's own row: mod.<feature> or mod.<feature>.<option>.
+std::string PsxOptionKey(const PsxOption& o);
+// Whether the game shows 16:9: its widescreen row (PsxOption::widescreen) is on.
+bool PsxWidescreen(const GameInfo& game, const trg::SettingsStore& st);
+// The picture height the game is drawn at and shown (the Resolution row; "screen": the monitor's height).
+int PsxOutputHeight(const trg::SettingsStore& st);
+// The height the game renders at before the upscaler (the output height divided by the mode's ratio; the output
+// height itself with the upscaler off).
+int PsxRenderHeight(const trg::SettingsStore& st);
+
 }  // namespace trg::hub

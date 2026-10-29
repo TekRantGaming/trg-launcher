@@ -46,6 +46,21 @@ struct PsxDisc {
   const char* copy_crc32;
 };
 
+// A row of a PlayStation port's own settings (GameInfo::psx_options): a feature of the game's mod package switched
+// on or off, or one of its options, written to the build's mods/state.toml at Play (psx.cpp). The launcher keeps
+// it as mod.<feature> or mod.<feature>.<option> in the game's settings file.
+struct PsxOption {
+  const char* section;  // the settings section it shows in: "Display", "Graphics", ...
+  const char* label;
+  const char* help;
+  const char* package;  // the mod package: "muppet.pc"
+  const char* feature;  // its feature: "widescreen"
+  const char* option = "";   // "": the row switches the feature; else the option it sets
+  const char* choices = "";  // an option row's values and labels: "30=30 FPS,60=60 FPS"
+  const char* def = "true";  // the manifest's default ("true"/"false" for a feature row)
+  bool widescreen = false;   // this feature turns 16:9 on: the window and Resolution follow it
+};
+
 struct GameInfo {
   const char* id;          // folder and settings name: "sneak_king" (games/<id>, <id>.toml, Documents/<id>)
   const char* title;       // "Sneak King"
@@ -81,6 +96,8 @@ struct GameInfo {
   // InstallSource::kPsxDisc: the discs the port plays, one build each (title_id, media_id and the copy_* facts above
   // are not used). From Muppet RaceMania Recompiled.
   std::vector<PsxDisc> psx_discs = {};
+  // InstallSource::kPsxDisc: the game's own settings rows (widescreen, frame rate, ...), from its mod package.
+  std::vector<PsxOption> psx_options = {};
 };
 
 // A psxrecomp port (InstallSource::kPsxDisc): the PlayStation settings, install and start apply, and it has no

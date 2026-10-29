@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -564,34 +565,73 @@ void AddSharedSections(App& app, int g, std::vector<Section>& s) {
 // ------------------------------------------------- PlayStation sections ---
 // A psxrecomp port: the runtime's own settings (written to the build's settings.toml and input.ini at Play,
 // psx.cpp WritePsxRuntimeSettings). From Muppet RaceMania Recompiled, after The Simpsons Wrestling's launcher.
+// The game's own rows (GameInfo::psx_options) that belong in `section`: a switch for a feature, a choice for an
+// option. The setting names live for the whole run, as the rows keep the pointer.
+void PsxOptionRows(Rows& r, const GameInfo& game, const char* section) {
+  static std::unordered_map<std::string, std::string> keys;
+  for (const PsxOption& o : game.psx_options) {
+    if (std::string_view(o.section) != section) continue;
+    const std::string id = PsxOptionKey(o);
+    const char* key = keys.emplace(id, id).first->second.c_str();
+    if (!*o.option) {
+      r.Toggle(o.label, o.help, key, std::string(o.def) == "true");
+      continue;
+    }
+    std::vector<Option> choices;
+    for (const char* c = o.choices; *c;) {
+      const char* end = std::strchr(c, ',');
+      const std::string item(c, end ? size_t(end - c) : std::strlen(c));
+      const size_t eq = item.find('=');
+      choices.push_back({item.substr(0, eq), eq == std::string::npos ? item : item.substr(eq + 1)});
+      c = end ? end + 1 : c + std::strlen(c);
+    }
+    r.Choice(o.label, o.help, key, o.def, choices);
+  }
+}
+
 std::vector<Section> PsxGameSections(App& app, int g) {
   std::vector<Section> s;
-  s.push_back({"Display", [](Rows& r) {
+  trg::SettingsStore& st = *app.game_ui(g).settings;
+  s.push_back({"Display", [g](Rows& r) {
     r.Choice("Window mode", "Borderless fills the screen at your desktop resolution. Alt+Enter switches while you "
              "play.", "window_mode", "borderless",
              {{"windowed", "Windowed"}, {"borderless", "Borderless"}, {"fullscreen", "Exclusive"}});
-    r.Choice("Window size", "The size of the window when the game is windowed.", "window_width", "0",
-             {{"0", "Automatic"}, {"1280", "1280 \xC3\x97 960"}, {"1600", "1600 \xC3\x97 1200"}, {"1920", "1920 \xC3\x97 1440"},
-              {"2560", "2560 \xC3\x97 1920"}});
+    // One size for everything: what the game is drawn at and shown, and the window's height when windowed.
+    r.Choice("Resolution", "The size the game is drawn at and shown, and the size of its window when windowed. "
+             "Higher sizes look sharper and need a faster graphics card.", "resolution", "screen",
+             {{"screen", "Your screen"}, {"720", "720p"}, {"1080", "1080p"}, {"1440", "1440p"}, {"2160", "4K"}});
     r.Choice("Monitor", "Which screen the game opens on.", "monitor", "0",
              {{"0", "Main"}, {"1", "Second"}, {"2", "Third"}, {"3", "Fourth"}});
     r.Choice("Vertical sync", "Waits for the display before showing a frame, which stops tearing.", "vsync", "on",
              {{"off", "Off"}, {"on", "On"}, {"adaptive", "Adaptive"}});
-    r.Toggle("Fill the screen", "Off keeps the original 4:3 picture with black bars at the sides. On stretches it to "
-             "fill the screen.", "stretch", false);
+    PsxOptionRows(r, Games()[g], "Display");
+    r.Toggle("Fill the screen", "Off keeps the picture's shape, with black bars where the screen is wider. On "
+             "stretches it to fill the screen.", "stretch", false);
     r.Toggle("Frame rate counter", "Shows the frame rate in the window's title.", "fps_counter", false);
   }});
-  s.push_back({"Graphics", [](Rows& r) {
-    r.Choice("Render resolution", "The game is drawn at this resolution, then scaled to the window. Above your "
-             "screen's resolution it smooths every edge.", "internal_resolution", "display",
-             {{"display", "Your screen"}, {"native", "Original (240p)"}, {"720p", "720p"}, {"1080p", "1080p"},
-              {"1440p", "1440p"}, {"4k", "4K"}});
-    r.Toggle("Smooth edges", "Anti aliasing (FXAA) after the picture is scaled.", "smooth_edges", true);
+  s.push_back({"Graphics", [&st, g](Rows& r) {
+    // Upscaler and its mode as in the ReXGlue ports: the game draws below the chosen resolution and the upscaler
+    // rebuilds the picture at it (gpu_gl_upscaler.cpp in psxrecomp; needs OpenGL 4.3).
+    r.Choice("Upscaler", "Draws the game smaller and scales it up to the resolution sharply. AMD FSR 1 works on any "
+             "graphics card, NVIDIA NIS suits NVIDIA cards. Off draws at the resolution chosen under Display.",
+             "upscaler", "off", {{"off", "Off"}, {"fsr", "AMD FSR 1"}, {"nis", "NVIDIA NIS"}});
+    if (st.Get("upscaler", "off") != "off") {
+      const std::string draws = "At " + std::to_string(PsxOutputHeight(st)) + "p the game draws " +
+                                std::to_string(PsxRenderHeight(st)) + " lines high.";
+      r.Choice("Upscaler mode", "Quality draws closest to the resolution, Performance draws smaller for speed. " +
+               draws, "upscaler_mode", "quality",
+               {{"quality", "Quality"}, {"balanced", "Balanced"}, {"performance", "Performance"}});
+      r.SliderInt("Upscaler sharpness", "How much the upscaler sharpens the picture.", "upscaler_sharpness", 50, 0,
+                  100, 5, "%d%%");
+    }
+    r.Choice("Anti aliasing", "Smooths jagged edges (FXAA).", "antialiasing", "fxaa", {{"off", "Off"}, {"fxaa", "FXAA"}});
     r.Toggle("Smooth textures", "Bilinear filtering. Off keeps the original sharp texture pixels.",
              "texture_filtering", false);
     r.Toggle("Stable geometry", "Sub pixel precision: stops the PlayStation's polygon wobble.", "geometry_correction",
              true);
-    r.SliderInt("Sharpening", "Sharpens the final picture.", "sharpen", 0, 0, 100, 5, "%d%%");
+    PsxOptionRows(r, Games()[g], "Graphics");
+    if (st.Get("upscaler", "off") == "off")
+      r.SliderInt("Sharpening", "Sharpens the final picture.", "sharpen", 0, 0, 100, 5, "%d%%");
     r.SliderInt("Brightness", "100% is the original picture.", "brightness", 100, 50, 150, 5, "%d%%");
     r.Choice("Screen filter", "Makes the picture look like it is on an old TV.", "screen_filter", "off",
              {{"off", "Off"}, {"crt", "CRT"}, {"composite", "Composite"}, {"trinitron", "Trinitron"}});

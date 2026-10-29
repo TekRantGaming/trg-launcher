@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -339,21 +340,94 @@ std::vector<std::string> ConnectedControllers() {
   return names;
 }
 
+std::string PsxOptionKey(const PsxOption& o) {
+  return std::string("mod.") + o.feature + (*o.option ? std::string(".") + o.option : std::string());
+}
+
+bool PsxWidescreen(const GameInfo& game, const trg::SettingsStore& st) {
+  for (const PsxOption& o : game.psx_options)
+    if (o.widescreen) return st.GetBool(PsxOptionKey(o), std::string(o.def) == "true");
+  return false;
+}
+
+int PsxOutputHeight(const trg::SettingsStore& st) {
+  const std::string r = st.Get("resolution", "screen");
+  if (r != "screen") return std::clamp(std::atoi(r.c_str()), 240, 4320);
+  SDL_DisplayMode dm{};
+  return SDL_GetDesktopDisplayMode(std::max(0, st.GetInt("monitor", 0)), &dm) == 0 && dm.h > 0 ? dm.h : 1080;
+}
+
+int PsxRenderHeight(const trg::SettingsStore& st) {
+  const int out = PsxOutputHeight(st);
+  if (st.Get("upscaler", "off") == "off") return out;
+  const std::string m = st.Get("upscaler_mode", "quality");
+  const double ratio = m == "performance" ? 2.0 : m == "balanced" ? 1.7 : 1.5;
+  return std::max(240, int(out / ratio + 0.5));
+}
+
+namespace {
+
+// mods/state.toml in the build: the game's own rows (GameInfo::psx_options), each feature with its on/off state
+// and option values. The launcher owns the file; features it does not list keep their manifest defaults.
+bool WritePsxModState(const GameInfo& game, const trg::SettingsStore& st, const std::string& build_dir) {
+  if (game.psx_options.empty()) return true;
+  struct Feature {
+    std::string package, id;
+    bool enabled = true;
+    std::vector<std::pair<std::string, std::string>> values;
+  };
+  std::vector<Feature> features;
+  auto find = [&](const PsxOption& o) -> Feature& {
+    for (Feature& f : features)
+      if (f.package == o.package && f.id == o.feature) return f;
+    features.push_back({o.package, o.feature});
+    return features.back();
+  };
+  for (const PsxOption& o : game.psx_options) {
+    Feature& f = find(o);
+    if (*o.option)
+      f.values.push_back({o.option, st.Get(PsxOptionKey(o), o.def)});
+    else
+      f.enabled = st.GetBool(PsxOptionKey(o), std::string(o.def) == "true");
+  }
+  std::string text = "format_version = 2\n# Written by the " + Project().name + " launcher at Play.\n";
+  for (const Feature& f : features) {
+    text += "\n[[feature]]\npackage_id = " + Quote(f.package) + "\nid = " + Quote(f.id) +
+            "\nenabled = " + (f.enabled ? "true" : "false") + "\n";
+    if (!f.values.empty()) {
+      text += "\n[feature.values]\n";
+      for (const auto& [k, v] : f.values) text += k + " = " + Quote(v) + "\n";
+    }
+  }
+  std::error_code ec;
+  fs::create_directories(fs::u8path(build_dir + "/mods"), ec);
+  std::ofstream out(fs::u8path(build_dir + "/mods/state.toml"), std::ios::binary | std::ios::trunc);
+  out << text;
+  return bool(out);
+}
+
+}  // namespace
+
 bool WritePsxRuntimeSettings(const GameInfo& game, const trg::SettingsStore& st, const std::string& build_dir) {
-  (void)game;
   SectionEditor toml(build_dir + "/settings.toml");
   const std::string mode = st.Get("window_mode", "borderless");
   toml.Set("video", "fullscreen", mode == "fullscreen" ? "2" : mode == "borderless" ? "1" : "0");
-  const int width = st.GetInt("window_width", 0);  // 0: the runtime fits the window to the display
-  toml.Set("video", "window_width", std::to_string(width <= 0 ? 0 : std::clamp(width, 640, 7680)));
+  // One Resolution: the window (when windowed) is that tall, in the game's shape, and the game is drawn at that
+  // height, or lower with an upscaler bringing it up to the window.
+  const int out_h = PsxOutputHeight(st);
+  const int width = PsxWidescreen(game, st) ? out_h * 16 / 9 : out_h * 4 / 3;
+  toml.Set("video", "window_width", std::to_string(std::clamp(width, 640, 7680)));
+  toml.Set("video", "internal_resolution", std::to_string(PsxRenderHeight(st)));
   toml.Set("video", "monitor", std::to_string(std::max(0, st.GetInt("monitor", 0))));
   toml.Set("video", "vsync", Quote(st.Get("vsync", "on")));
   toml.Set("video", "stretch", st.GetBool("stretch", false) ? "true" : "false");
   toml.Set("video", "fps_counter", st.GetBool("fps_counter", false) ? "true" : "false");
-  toml.Set("video", "internal_resolution", Quote(st.Get("internal_resolution", "display")));
-  const bool smooth = st.GetBool("smooth_edges", true);
-  toml.Set("video", "antialiasing", smooth ? "true" : "false");
-  toml.Set("video", "fxaa", smooth ? "true" : "false");
+  const std::string upscaler = st.Get("upscaler", "off");
+  toml.Set("video", "upscaler", Quote(upscaler == "fsr" || upscaler == "nis" ? upscaler : "off"));
+  toml.Set("video", "upscaler_sharpness", std::to_string(std::clamp(st.GetInt("upscaler_sharpness", 50), 0, 100)));
+  const bool fxaa = st.Get("antialiasing", "fxaa") == "fxaa";
+  toml.Set("video", "antialiasing", fxaa ? "true" : "false");
+  toml.Set("video", "fxaa", fxaa ? "true" : "false");
   toml.Set("video", "texture_filtering", Quote(st.GetBool("texture_filtering", false) ? "bilinear" : "nearest"));
   const bool stable = st.GetBool("geometry_correction", true);
   toml.Set("video", "geometry_correction", stable ? "true" : "false");
@@ -389,7 +463,7 @@ bool WritePsxRuntimeSettings(const GameInfo& game, const trg::SettingsStore& st,
   // The launcher starts the game with --no-launcher; this also keeps the runtime's own launcher away when the
   // game is started by itself.
   toml.Set("launcher", "skip_launcher", "true");
-  bool ok = toml.Save();
+  bool ok = toml.Save() && WritePsxModState(game, st, build_dir);
 
   SectionEditor input(build_dir + "/input.ini");
   if (input.exists()) {
