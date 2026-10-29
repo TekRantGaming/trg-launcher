@@ -592,7 +592,7 @@ void PsxOptionRows(Rows& r, const GameInfo& game, const char* section) {
 std::vector<Section> PsxGameSections(App& app, int g) {
   std::vector<Section> s;
   trg::SettingsStore& st = *app.game_ui(g).settings;
-  s.push_back({"Display", [g](Rows& r) {
+  s.push_back({"Display", [&st, g](Rows& r) {
     r.Choice("Window mode", "Borderless fills the screen at your desktop resolution. Alt+Enter switches while you "
              "play.", "window_mode", "borderless",
              {{"windowed", "Windowed"}, {"borderless", "Borderless"}, {"fullscreen", "Exclusive"}});
@@ -605,6 +605,10 @@ std::vector<Section> PsxGameSections(App& app, int g) {
     r.Choice("Vertical sync", "Waits for the display before showing a frame, which stops tearing.", "vsync", "on",
              {{"off", "Off"}, {"on", "On"}, {"adaptive", "Adaptive"}});
     PsxOptionRows(r, Games()[g], "Display");
+    if (PsxWidescreen(Games()[g], st))
+      r.Toggle("Widescreen movies", "The game's movies are made in 4:3. On zooms them to fill the 16:9 screen, "
+               "trimming a little from the top and bottom. Off shows them in 4:3 with black bars at the sides.",
+               "fmv_fill", true);
     r.Toggle("Fill the screen", "Off keeps the picture's shape, with black bars where the screen is wider. On "
              "stretches it to fill the screen.", "stretch", false);
     r.Toggle("Frame rate counter", "Shows the frame rate in the window's title.", "fps_counter", false);

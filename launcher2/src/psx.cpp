@@ -421,6 +421,8 @@ bool WritePsxRuntimeSettings(const GameInfo& game, const trg::SettingsStore& st,
   toml.Set("video", "monitor", std::to_string(std::max(0, st.GetInt("monitor", 0))));
   toml.Set("video", "vsync", Quote(st.Get("vsync", "on")));
   toml.Set("video", "stretch", st.GetBool("stretch", false) ? "true" : "false");
+  // Movies fill the width only beside a 16:9 game; with the game in 4:3 they keep its shape.
+  toml.Set("video", "fmv_fill", PsxWidescreen(game, st) && st.GetBool("fmv_fill", true) ? "true" : "false");
   toml.Set("video", "fps_counter", st.GetBool("fps_counter", false) ? "true" : "false");
   const std::string upscaler = st.Get("upscaler", "off");
   toml.Set("video", "upscaler", Quote(upscaler == "fsr" || upscaler == "nis" ? upscaler : "off"));

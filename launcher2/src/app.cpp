@@ -258,8 +258,9 @@ void App::PrimaryAction(int game) {
 }
 
 void App::Play(int game) {
-  // Only games with the return hook (from_launcher_flag) can be left with Back and Start; the others are closed.
-  const bool can_return = !Project().from_launcher_flag.empty() && !IsPsx(Games()[game]);
+  // Only games with the return hook (from_launcher_flag, or the PlayStation runtime's --from-launcher) can be left
+  // with Back and Start; the others are closed.
+  const bool can_return = IsPsx(Games()[game]) || !Project().from_launcher_flag.empty();
   if (!can_return || launcher_settings_->GetBool("return_note_seen", false)) {
     LaunchGame(game);
     return;
@@ -338,7 +339,7 @@ bool App::LaunchGame(int game) {
     if (!WritePsxRuntimeSettings(g, *games_[game]->settings, dir))
       SetToast("The game's settings could not be written; it starts with the ones it had.", true);
     return Launch(PsxExePath(g, *installed.disc), dir,
-                  {"--no-launcher", "--disc", installed.cue, "--memcard-dir", SavesDir(g)}, g.title, game);
+                  {"--no-launcher", "--from-launcher", "--disc", installed.cue, "--memcard-dir", SavesDir(g)}, g.title, game);
   }
   std::vector<std::string> args = {"--game_data_root=" + GameDataDir(g)};
   // Back and Start, or holding Esc, closes the game (game_side/return_to_launcher.cpp).
