@@ -611,7 +611,7 @@ std::vector<Section> PsxGameSections(App& app, int g) {
                "fmv_fill", true);
     r.Toggle("Fill the screen", "Off keeps the picture's shape, with black bars where the screen is wider. On "
              "stretches it to fill the screen.", "stretch", false);
-    r.Toggle("Frame rate counter", "Shows the frame rate in the window's title.", "fps_counter", false);
+    r.Toggle("Frame rate counter", "Shows the frame rate in the top left corner while you play.", "fps_counter", false);
   }});
   s.push_back({"Graphics", [&st, g](Rows& r) {
     // Upscaler and its mode as in the ReXGlue ports: the game draws below the chosen resolution and the upscaler
