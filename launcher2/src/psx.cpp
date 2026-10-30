@@ -248,7 +248,13 @@ InstalledPsx InstalledPsxDisc(const GameInfo& game) {
 }
 
 std::string PsxBuildDir(const GameInfo& game, const PsxDisc& disc) { return GameDir(game) + "/" + disc.folder; }
-std::string PsxExePath(const GameInfo& game, const PsxDisc& disc) { return PsxBuildDir(game, disc) + "/" + game.exe; }
+std::string PsxExePath(const GameInfo& game, const PsxDisc& disc) {
+  std::string exe = game.exe;
+#if !defined(_WIN32)
+  if (exe.size() > 4 && exe.compare(exe.size() - 4, 4, ".exe") == 0) exe.resize(exe.size() - 4);
+#endif
+  return PsxBuildDir(game, disc) + "/" + exe;
+}
 
 std::string InstallPsxDisc(trg::Task& task, const GameInfo& game, const std::string& path, const std::string& out_dir) {
   const std::string title = game.title;

@@ -138,6 +138,12 @@ std::string GameSettingsPath(const GameInfo& game) { return GameDir(game) + "/" 
 // The games come inside the AppImage, beside the launcher, without ".exe"; each reads its settings from its user
 // folder (the games' OnConfigurePaths).
 std::string GameExePath(const GameInfo& game) {
+  // A PlayStation build keeps its settings and files beside itself, so it cannot run inside the AppImage: the
+  // AppRun copies the builds to games/<id> (LauncherDir() is the user's data folder here).
+  if (IsPsx(game) && !game.psx_discs.empty()) {
+    const InstalledPsx installed = InstalledPsxDisc(game);
+    return PsxExePath(game, installed.disc ? *installed.disc : game.psx_discs.front());
+  }
   std::string exe = game.exe;
   if (exe.size() > 4 && exe.compare(exe.size() - 4, 4, ".exe") == 0) exe.resize(exe.size() - 4);
   return ProgramDir() + "/" + exe;

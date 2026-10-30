@@ -5,6 +5,7 @@
 #include "psx.h"
 #include "sounds.h"
 
+#include <cstring>
 #include <filesystem>
 
 #if defined(_WIN32)
@@ -399,8 +400,14 @@ bool App::Launch(const std::string& exe, const std::string& dir_utf8, const std:
   posix_spawn_file_actions_t actions;
   posix_spawn_file_actions_init(&actions);
   posix_spawn_file_actions_addchdir_np(&actions, dir_utf8.c_str());
+  // The psxrecomp runtime looks for its files beside $APPIMAGE when it is set, not beside itself.
+  const bool psx = index >= 0 && index < GameCount() && IsPsx(Games()[index]);
+  std::vector<char*> env;
+  for (char** e = environ; *e; ++e)
+    if (!psx || std::strncmp(*e, "APPIMAGE=", 9) != 0) env.push_back(*e);
+  env.push_back(nullptr);
   pid_t pid = 0;
-  const int err = posix_spawn(&pid, exe.c_str(), &actions, nullptr, argv.data(), environ);
+  const int err = posix_spawn(&pid, exe.c_str(), &actions, nullptr, argv.data(), env.data());
   posix_spawn_file_actions_destroy(&actions);
   if (err != 0) {
     SetToast(title + " could not be started.", true);

@@ -256,6 +256,10 @@ launcher, linked with `$ORIGIN` as their library path), the bundled Noto Sans fo
 copy so Steam stopping a game cannot unmount the files under it. The Whopping collection's scripts are in
 [`examples/whopping/tools/linux`](examples/whopping/tools/linux). The playbook's Linux chapter has the rest.
 
+A PlayStation port cannot run inside the AppImage, because its build keeps settings and files beside itself: its
+`AppRun` copies the builds to `games/<id>` in the launcher's data folder, where Play starts them (Muppet RaceMania
+Recompiled's `packaging/build_appimage.sh`).
+
 ## Testing
 
 The launcher has switches for scripted checks that never need the screen:
