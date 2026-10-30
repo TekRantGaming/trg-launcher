@@ -102,7 +102,7 @@ class PickerEvents : public IFileDialogEvents {
   std::atomic<ULONG> refs_{1};
 };
 
-std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool folder) {
+std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool folder, bool apk = false) {
   const HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   std::string out;
   IFileOpenDialog* dlg = nullptr;
@@ -110,8 +110,11 @@ std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool
     const COMDLG_FILTERSPEC discs[] = {{L"Xbox 360 disc images (*.iso)", L"*.iso"}, {L"All files", L"*.*"}};
     // Packages have no file name extension, so every file is shown.
     const COMDLG_FILTERSPEC packages[] = {{L"Xbox 360 game packages (all files)", L"*.*"}};
+    const COMDLG_FILTERSPEC apks[] = {{L"Android packages (*.apk)", L"*.apk"}, {L"All files", L"*.*"}};
     if (!folder) {
-      if (package)
+      if (apk)
+        dlg->SetFileTypes(2, apks);
+      else if (package)
         dlg->SetFileTypes(1, packages);
       else
         dlg->SetFileTypes(2, discs);
@@ -149,6 +152,7 @@ std::string ShowPicker(HWND owner, const std::wstring& title, bool package, bool
 
 void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool folder = false) {
   const bool package = Games()[game].source == InstallSource::kPackage;
+  const bool apk = Games()[game].source == InstallSource::kApk;
   {
     std::lock_guard<std::mutex> lock(g_picker.mu);
     if (g_picker.open) return;
@@ -168,8 +172,8 @@ void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool fold
   std::wstring wtitle(size_t(std::max(n, 1)), L'\0');
   MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, wtitle.data(), n);
   wtitle.resize(wcslen(wtitle.c_str()));
-  std::thread([hwnd, wtitle, package, folder] {
-    std::string path = ShowPicker(hwnd, wtitle, package, folder);
+  std::thread([hwnd, wtitle, package, folder, apk] {
+    std::string path = ShowPicker(hwnd, wtitle, package, folder, apk);
     std::lock_guard<std::mutex> lock(g_picker.mu);
     g_picker.path = std::move(path);
     g_picker.open = false;
@@ -179,8 +183,9 @@ void OpenPicker(SDL_Window* owner, int game, const std::string& title, bool fold
 #else
   (void)owner;
   (void)folder;
-  std::string path = package ? trg::BrowseForFile(title, {{"Xbox 360 game packages", "*"}})
-                             : trg::BrowseForFile(title, {{"Xbox 360 disc images", "*.iso"}});
+  std::string path = apk       ? trg::BrowseForFile(title, {{"Android packages", "*.apk"}})
+                     : package ? trg::BrowseForFile(title, {{"Xbox 360 game packages", "*"}})
+                               : trg::BrowseForFile(title, {{"Xbox 360 disc images", "*.iso"}});
   std::lock_guard<std::mutex> lock(g_picker.mu);
   g_picker.path = std::move(path);
   g_picker.open = false;
@@ -227,10 +232,24 @@ void CopyCard(const GameInfo& game, ImVec2 a, float w) {
       {"CRC32", game.copy_crc32},
       {"Installed size", game.installed_size},
   });
+  if (game.source == InstallSource::kApk) {
+    lines = {{"Game", game.title}};
+    if (!p.made_by.empty()) lines.push_back({"Made by", p.made_by});
+    if (!p.console.empty()) lines.push_back({"Platform", p.console});
+    lines.insert(lines.end(), {
+        {"Package", game.android_package ? game.android_package : ""},
+        {"Version", game.copy_version},
+        {"Tested APK", std::string(game.copy_name) + ", " + game.copy_size},
+    });
+    if (game.copy_obb) lines.push_back({"Tested OBB", game.copy_obb});
+    lines.insert(lines.end(), {{"APK SHA1", game.copy_sha1}, {"APK MD5", game.copy_md5}, {"APK CRC32", game.copy_crc32},
+                               {"Installed size", game.installed_size}});
+  }
   const float line_h = 25 * f.s;
   const ImVec2 b(a.x + w, a.y + 58 * f.s + line_h * float(lines.size()) + (disc ? 64 : 80) * f.s);
   Card(a, b, 0.08f);
-  Text(f.semibold, 17, ImVec2(a.x + 20 * f.s, a.y + 18 * f.s), White(), disc ? "Supported disc" : "Supported package");
+  Text(f.semibold, 17, ImVec2(a.x + 20 * f.s, a.y + 18 * f.s), White(),
+       disc ? "Supported disc" : game.source == InstallSource::kApk ? "Supported copy" : "Supported package");
   float y = a.y + 52 * f.s;
   for (const auto& [label, value] : lines) {
     Text(f.regular, 13, ImVec2(a.x + 20 * f.s, y), White(0.55f), label);
@@ -240,7 +259,11 @@ void CopyCard(const GameInfo& game, ImVec2 a, float w) {
     y += line_h;
   }
   Text(f.regular, 12, ImVec2(a.x + 20 * f.s, y + 8 * f.s), White(0.5f),
-       disc ? std::string("Make the image (.iso) from your own disc. Other versions and regions will not work; another "
+       game.source == InstallSource::kApk
+           ? std::string("Use the .apk of your own purchase, with its main.<number>.") +
+                 (game.android_package ? game.android_package : "") +
+                 ".obb expansion file in the same folder. Only the package name is checked."
+       : disc ? std::string("Make the image (.iso) from your own disc. Other versions and regions will not work; another "
                           "good dump of this disc does, as only the title ID is checked.")
             : "Copy the package from your own console or its storage: it is the one file in Content\\0000000000000000\\" +
                   std::string(id) + "\\000D0000. A folder it was extracted to works too. The full game is always unlocked.",
@@ -285,6 +308,43 @@ void PackageRows(App& app, int g, Rows& r) {
   }
   if (!app.packages().running() && r.Button("Search again", "Looks through this PC for your copy again."))
     app.packages().Rescan();
+}
+
+// The rows for an Android game: .apk files of its package found on this PC (with their OBB), then the file.
+void ApkRows(App& app, int g, Rows& r) {
+  const GameInfo& game = Games()[g];
+  GameUi& u = app.game_ui(g);
+  const std::string pkg = game.android_package ? game.android_package : "";
+  r.Paragraph("This PC port is built from your own copy of " + std::string(game.title) + ": the Android package (.apk)" +
+              (game.needs_obb ? " and its expansion file (.obb)" : std::string()) + " from your purchase. The game's "
+              "files come from it. Nothing from the game comes with the launcher.");
+  if (u.jobs.message_is_error && !u.jobs.message.empty()) r.Paragraph(u.jobs.message, false);
+  app.apks().Start();
+  for (const FoundApk& d : app.apks().Found(pkg)) {
+    char size[32];
+    std::snprintf(size, sizeof size, "%.0f MB", double(d.size) / (1024.0 * 1024.0));
+    const std::string name = std::filesystem::u8path(d.path).filename().u8string();
+    const std::string obb = d.obb.empty() ? std::string("no expansion file beside it")
+                                          : "with " + std::filesystem::u8path(d.obb).filename().u8string();
+    if (r.Button(name, "Found on this PC: " + d.path + "  (" + size + ", " + obb + ")", "Install")) {
+      u.disc_path = d.path;
+      StartInstall(game, d.path, u.jobs);
+    }
+  }
+  if (app.apks().running())
+    r.Paragraph(app.apks().Found(pkg).empty() ? "Looking for your copy on this PC..." : "Still looking for others...");
+  else if (app.apks().Found(pkg).empty())
+    r.Paragraph("Your copy of this game was not found on this PC. Choose its .apk yourself below.");
+  if (PickerOpen()) {
+    r.Paragraph("Choose your copy of the game in the file window that opened.");
+    if (r.Button("Show the file window", "Brings the file window to the front, in case it opened behind."))
+      PickerToFront();
+  } else if (r.Button("Choose .apk file", "Pick the game's .apk, or drop it on this window. Its .obb must be in the "
+                      "same folder.")) {
+    OpenPicker(app.window(), g, "Choose your " + std::string(game.title) + " .apk");
+  }
+  if (!app.apks().running() && r.Button("Search again", "Looks through this PC for your copy again."))
+    app.apks().Rescan();
 }
 
 }  // namespace
@@ -336,6 +396,8 @@ void DrawInstall(App& app, int g) {
       r.Progress(u.jobs.task.label(), u.jobs.task.fraction());
       r.Paragraph("You can leave this screen: the install carries on and the game is ready when it finishes.");
       if (r.Button("Cancel", "Stops the install. Nothing is left half done.")) u.jobs.task.Cancel();
+    } else if (game.source == InstallSource::kApk) {
+      ApkRows(app, g, r);
     } else if (game.source == InstallSource::kPackage) {
       PackageRows(app, g, r);
     } else {

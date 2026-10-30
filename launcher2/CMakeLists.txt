@@ -21,6 +21,7 @@ add_library(trg_launcher2 STATIC
   src/art.cpp
   src/art_source.cpp
   src/dash.cpp
+  src/android.cpp
   src/disc_finder.cpp
   src/games.cpp
   src/game_settings.cpp

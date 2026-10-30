@@ -205,7 +205,7 @@ void App::OpenGameSettings(int game, const char* section) {
   gu.achievements.loaded = false;  // read again: the game may have unlocked some since
   gu.settings_view.in_rows = false;
   if (section) {
-    const int s = FindGameSection(section);
+    const int s = FindGameSection(section, game);
     if (s >= 0) {
       gu.settings_view.section = s;
       gu.settings_view.in_rows = true;

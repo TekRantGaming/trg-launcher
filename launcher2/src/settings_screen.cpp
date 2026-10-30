@@ -38,8 +38,47 @@ const char* K(const char* name) {
 }
 
 struct Section {
-  const char* name;
+  std::string name;
   std::function<void(Rows&)> draw;
+};
+
+// A project's own sections (ProjectConfig::game_settings) draw through the public SettingsRows; this forwards to the
+// dashboard's rows. Keys are kept for the whole run, as the rows keep the pointer.
+class RowsAdapter : public SettingsRows {
+ public:
+  RowsAdapter(Rows& r, trg::SettingsStore& st) : r_(r), st_(st) {}
+  void Heading(const std::string& text) override { r_.Heading(text); }
+  void Paragraph(const std::string& text) override { r_.Paragraph(text); }
+  void Info(const std::string& label, const std::string& value) override { r_.Info(label, value); }
+  bool Button(const std::string& label, const std::string& help, const std::string& value) override {
+    return r_.Button(label, help, value);
+  }
+  bool Toggle(const std::string& label, const std::string& help, const std::string& key, bool def) override {
+    return r_.Toggle(label, help, Key(key), def);
+  }
+  bool Choice(const std::string& label, const std::string& help, const std::string& key, const std::string& def,
+              const Options& options) override {
+    std::vector<Option> o;
+    for (const auto& [value, name] : options) o.push_back({value, name});
+    return r_.Choice(label, help, Key(key), def, o);
+  }
+  bool SliderInt(const std::string& label, const std::string& help, const std::string& key, int def, int min, int max,
+                 int step, const char* fmt) override {
+    return r_.SliderInt(label, help, Key(key), def, min, max, step, fmt);
+  }
+  bool SliderFloat(const std::string& label, const std::string& help, const std::string& key, float def, float min,
+                   float max, float step, const char* fmt) override {
+    return r_.SliderFloat(label, help, Key(key), def, min, max, step, fmt);
+  }
+  trg::SettingsStore& store() override { return st_; }
+
+ private:
+  static const char* Key(const std::string& key) {
+    static std::unordered_map<std::string, std::string> keys;
+    return keys.emplace(key, key).first->second.c_str();
+  }
+  Rows& r_;
+  trg::SettingsStore& st_;
 };
 
 // ------------------------------------------------------------- screen -----
@@ -239,8 +278,18 @@ int RenderScaleFor(const std::string& mode, int output_height) {
 std::vector<Section> GameSections(App& app, int g) {
   trg::SettingsStore& st = *app.game_ui(g).settings;
   std::vector<Section> s;
+  const bool custom = bool(Project().game_settings);
+  if (custom) {
+    for (SettingsSection& sec : Project().game_settings(g)) {
+      auto draw = sec.draw;
+      s.push_back({sec.name, [&st, draw](Rows& r) {
+        RowsAdapter a(r, st);
+        draw(a);
+      }});
+    }
+  }
 
-  s.push_back({"Display", [&st](Rows& r) {
+  if (!custom) s.push_back({"Display", [&st](Rows& r) {
     r.Choice("Window mode", "Fullscreen fills your screen. Windowed opens a window you can move and resize.",
              "fullscreen", "true", {{"true", "Fullscreen"}, {"false", "Windowed"}});
     // The windowed size: window_width and window_height together (logical pixels, so Windows display scaling
@@ -282,7 +331,7 @@ std::vector<Section> GameSections(App& app, int g) {
              "a screen of another shape.", "present_letterbox", true);
   }});
 
-  s.push_back({"Graphics", [&st](Rows& r) {
+  if (!custom) s.push_back({"Graphics", [&st](Rows& r) {
     // Upscaler and its mode as in King Kong Recompiled 1.9.x: the mode picks
     // the render scale from the screen when the game starts (game_side/render_quality.cpp); with the upscaler
     // off the render resolution is chosen directly. Without that hook only the upscaler and the resolution show.
@@ -320,7 +369,7 @@ std::vector<Section> GameSections(App& app, int g) {
              {{"-1", "Original"}, {"2", "2x"}, {"3", "4x"}, {"4", "8x"}, {"5", "16x"}});
   }});
 
-  if (Project().features.controller_options) s.push_back({"Controller", [&st](Rows& r) {
+  if (!custom && Project().features.controller_options) s.push_back({"Controller", [&st](Rows& r) {
     r.Toggle("Invert horizontal", "Turns the camera the other way left and right.", K("invert_x"), false);
     r.Toggle("Invert vertical", "Turns the camera the other way up and down.", K("invert_y"), false);
     r.SliderInt("Camera sensitivity", "How fast the right stick turns the camera.", K("stick_sensitivity"), 100, 25,
@@ -338,7 +387,7 @@ std::vector<Section> GameSections(App& app, int g) {
     (void)st;
   }});
 
-  s.push_back({"Keyboard and mouse", [&st, g](Rows& r) {
+  if (!custom) s.push_back({"Keyboard and mouse", [&st, g](Rows& r) {
     r.Toggle("Keyboard and mouse", "Play with the keyboard and mouse instead of a controller.", "mnk_mode", false);
     r.Toggle("Mouse look", "The mouse turns the camera. Off: the look keys do.", "mnk_mouse", false);
     // A game with its own mouse look hook turns its camera directly, with its own setting; the others turn the
@@ -375,11 +424,11 @@ std::vector<Section> GameSections(App& app, int g) {
     }
   }});
 
-  s.push_back({"Audio", [](Rows& r) {
+  if (!custom) s.push_back({"Audio", [](Rows& r) {
     r.Toggle("Mute", "Turns all game sound off.", "audio_mute", false);
   }});
 
-  s.push_back({"Achievements", [&app, g](Rows& r) {
+  if (Project().features.achievements) s.push_back({"Achievements", [&app, g](Rows& r) {
     if (app.state(g) != GameState::kInstalled) {
       r.Paragraph("Install the game to see its achievements.");
       return;
@@ -468,7 +517,7 @@ std::vector<Section> GameSections(App& app, int g) {
     }
   }});
 
-  s.push_back({"Updates", [&app, g](Rows& r) {
+  if (!Project().repo.empty()) s.push_back({"Updates", [&app, g](Rows& r) {
     const GameInfo& game = Games()[g];
     GameJobs& jobs = app.game_ui(g).jobs;
     const std::string v = InstalledVersion(game);
@@ -486,13 +535,21 @@ std::vector<Section> GameSections(App& app, int g) {
     const GameInfo& game = Games()[g];
     char id[16];
     std::snprintf(id, sizeof id, "%08X", game.title_id);
-    r.Paragraph(std::string(game.title) + " for PC, made by static recompilation of the Xbox 360 game. You need "
-                "your own " + (game.source == InstallSource::kDisc ? "disc." : "copy of the game."));
+    const std::string kind = Project().port_kind.empty() ? "static recompilation of the Xbox 360 game"
+                                                         : Project().port_kind;
+    r.Paragraph(std::string(game.title) + " for PC, made by " + kind + ". You need your own " +
+                (game.source == InstallSource::kDisc ? "disc." : "copy of the game."));
     r.Info("Game", game.title);
-    r.Info("Xbox 360 title ID", id);
-    r.Info("Media ID", game.media_id);
+    if (game.source == InstallSource::kApk) {
+      r.Info("Android package", game.android_package ? game.android_package : "");
+    } else {
+      r.Info("Xbox 360 title ID", id);
+      r.Info("Media ID", game.media_id);
+    }
     r.Info(game.source == InstallSource::kDisc ? "Disc version" : "Game version", game.copy_version);
-    r.Info(game.source == InstallSource::kDisc ? "Disc image" : "Package", std::string(game.copy_name) + ", " + game.copy_size);
+    r.Info(game.source == InstallSource::kDisc ? "Disc image" : game.source == InstallSource::kApk ? "Tested APK" : "Package",
+           std::string(game.copy_name) + ", " + game.copy_size);
+    if (game.source == InstallSource::kApk && game.copy_obb) r.Info("Tested OBB", game.copy_obb);
     r.Info("SHA1", game.copy_sha1);
     r.Info("MD5", game.copy_md5);
     r.Info("CRC32", game.copy_crc32);
@@ -514,13 +571,25 @@ const char* kGameSectionNames[] = {"Display",      "Graphics",          "Control
 
 }  // namespace
 
-int FindGameSection(const char* name) {
-  int index = 0;
-  for (const char* s : kGameSectionNames) {
-    if (std::string_view(s) == "Controller" && !Project().features.controller_options) continue;  // not shown
-    if (std::string(s) == name) return index;
-    ++index;
+int FindGameSection(const char* name, int game) {
+  // The sections in the order GameSections adds them.
+  std::vector<std::string> names;
+  const bool custom = bool(Project().game_settings);
+  if (custom) {
+    for (const SettingsSection& sec : Project().game_settings(game)) names.push_back(sec.name);
   }
+  for (const char* s : kGameSectionNames) {
+    const std::string_view n(s);
+    const bool runtime = n == "Display" || n == "Graphics" || n == "Controller" || n == "Keyboard and mouse" ||
+                         n == "Audio";
+    if (custom && runtime) continue;
+    if (n == "Controller" && !Project().features.controller_options) continue;  // not shown
+    if (n == "Achievements" && !Project().features.achievements) continue;
+    if (n == "Updates" && Project().repo.empty()) continue;
+    names.push_back(s);
+  }
+  for (size_t i = 0; i < names.size(); ++i)
+    if (names[i] == name) return int(i);
   return -1;
 }
 

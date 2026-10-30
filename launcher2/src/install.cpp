@@ -5,6 +5,7 @@
 
 #include <trg/xbox360.h>
 
+#include "android.h"
 #include "package.h"
 
 namespace trg::hub {
@@ -42,7 +43,9 @@ std::string DescribeTitleId(uint32_t title_id, InstallSource source) {
 }
 
 void StartInstall(const GameInfo& game, const std::string& path, GameJobs& jobs) {
-  if (game.source == InstallSource::kPackage)
+  if (game.source == InstallSource::kApk)
+    StartApkInstall(game, path, jobs);
+  else if (game.source == InstallSource::kPackage)
     StartPackageInstall(game, path, jobs);
   else
     StartDiscInstall(game, path, jobs);

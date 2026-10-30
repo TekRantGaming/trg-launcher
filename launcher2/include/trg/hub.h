@@ -13,10 +13,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
+
+#include <trg/platform.h>
+#include <trg/settings.h>
 
 namespace trg::hub {
 
@@ -25,6 +30,15 @@ enum class InstallSource {
   kDisc,     // an Xbox 360 disc image (.iso); its title ID is checked, then the disc is extracted
   kPackage,  // an Xbox Live Arcade package (the file in Content/<profile>/<title ID>/000D0000), or a folder it was
              // extracted to; the full game is always unlocked by the game's port, not here
+  kApk,      // an Android game: the player's own .apk (its package name is checked) and, when the game has one, its
+             // main.<version>.<package>.obb expansion file; GameInfo::install_apk turns them into the PC game
+};
+
+// What GameInfo::install_apk is given: the player's files and where the game goes (UTF-8 paths).
+struct ApkInstall {
+  std::string apk;   // the player's .apk
+  std::string obb;   // its main.*.obb beside it ("" when the game has none or it was not found)
+  std::string dest;  // GameDir: games/<id>
 };
 
 struct GameInfo {
@@ -54,6 +68,43 @@ struct GameInfo {
   // The game turns its camera with the mouse itself (its own mouse look hook): its Keyboard and mouse section shows
   // <prefix>mouse_sensitivity and <prefix>mouse_invert_y instead of the runtime's mouse to stick sensitivity.
   bool own_mouse_look = false;
+
+  // The file (relative to games/<id>) whose presence means the player's copy is installed. nullptr: the Xbox 360
+  // layout, "game/default.xex".
+  const char* installed_marker = nullptr;
+  // kApk: the Android package name the player's .apk must have ("com.fde.avpevolution"), and whether the game also
+  // needs its OBB expansion file.
+  const char* android_package = nullptr;
+  bool needs_obb = false;
+  const char* copy_obb = nullptr;  // kApk: the tested OBB's file name and size, for the install page
+  // kApk: builds the PC game from the player's files into ApkInstall::dest, reporting progress on the task. Returns
+  // "" on success or a message for the player. Runs on a worker thread.
+  std::function<std::string(trg::Task&, const ApkInstall&)> install_apk;
+};
+
+// The rows a project's own settings sections draw (ProjectConfig::game_settings). Keys are read and written in the
+// game's settings file (games/<id>/<id>.toml) as they change, like the launcher's own rows.
+class SettingsRows {
+ public:
+  using Options = std::vector<std::pair<std::string, std::string>>;  // {value, label}
+  virtual ~SettingsRows() = default;
+  virtual void Heading(const std::string& text) = 0;
+  virtual void Paragraph(const std::string& text) = 0;
+  virtual void Info(const std::string& label, const std::string& value) = 0;
+  virtual bool Button(const std::string& label, const std::string& help, const std::string& value = "") = 0;
+  virtual bool Toggle(const std::string& label, const std::string& help, const std::string& key, bool def) = 0;
+  virtual bool Choice(const std::string& label, const std::string& help, const std::string& key,
+                      const std::string& def, const Options& options) = 0;
+  virtual bool SliderInt(const std::string& label, const std::string& help, const std::string& key, int def, int min,
+                         int max, int step, const char* fmt = "%d") = 0;
+  virtual bool SliderFloat(const std::string& label, const std::string& help, const std::string& key, float def,
+                           float min, float max, float step, const char* fmt = "%.1f") = 0;
+  virtual trg::SettingsStore& store() = 0;  // the game's settings file, for presets that set several keys
+};
+
+struct SettingsSection {
+  std::string name;
+  std::function<void(SettingsRows&)> draw;
 };
 
 // A tile on the Other TRG Projects page. Art links are full URLs (usually SteamGridDB); "" draws a plain card.
@@ -76,6 +127,7 @@ struct Features {
   bool render_quality = true;      // <prefix>render_quality: upscaler modes (render_quality.cpp)
   bool controller_options = true;  // invert, camera sensitivity, deadzone, vibration, button remapping (input hook)
   bool achievement_toasts = true;  // the in game pop up and chime (achievement_toast.cpp)
+  bool achievements = true;        // the Achievements section (the game writes the ReXGlue achievement files)
 };
 
 struct ProjectConfig {
@@ -108,6 +160,14 @@ struct ProjectConfig {
   std::string test_background_env;       // when set, windows stay where they open (test runs): "BK_TEST_BACKGROUND"
   std::string release_server_env;        // a fake release server for tests: "WHOPPING_RELEASE_SERVER"
   Features features;
+
+  // A game's own settings sections. When set, they replace the ReXGlue runtime's sections (Display, Graphics,
+  // Controller, Keyboard and mouse, Audio) for that game; Achievements, Saves and install, Updates and About stay.
+  // Empty (the default): the ReXGlue sections.
+  std::function<std::vector<SettingsSection>(int game)> game_settings;
+  // Words for the About section and the install page ("an Android port", "static recompilation of the Xbox 360
+  // game"): how the PC version was made. "" keeps the recompilation wording.
+  std::string port_kind;
 
   // Links. An empty value hides its tile.
   std::string discord_url;     // "https://discord.gg/..."

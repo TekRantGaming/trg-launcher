@@ -96,8 +96,14 @@ std::string SavesDir(const GameInfo& game) {
 
 GameState DetectState(const GameInfo& game) {
   std::error_code ec;
-  if (!fs::exists(PathOf(GameExePath(game)), ec)) return GameState::kNotDownloaded;
-  if (!fs::exists(PathOf(GameDataDir(game) + "/default.xex"), ec)) return GameState::kDownloaded;
+  const std::string marker = game.installed_marker ? GameDir(game) + "/" + game.installed_marker
+                                                   : GameDataDir(game) + "/default.xex";
+  if (!fs::exists(PathOf(GameExePath(game)), ec)) {
+    // No releases to download from: the program comes with the install from the player's copy.
+    if (Project().repo.empty()) return GameState::kDownloaded;
+    return GameState::kNotDownloaded;
+  }
+  if (!fs::exists(PathOf(marker), ec)) return GameState::kDownloaded;
   return GameState::kInstalled;
 }
 

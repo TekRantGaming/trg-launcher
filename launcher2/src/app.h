@@ -20,6 +20,7 @@
 #include <trg/updater.h>
 
 #include "achievements.h"
+#include "android.h"
 #include "art.h"
 #include "dash.h"
 #include "disc_finder.h"
@@ -110,6 +111,7 @@ class App {
   UploadFn upload() const { return upload_; }
   DiscFinder& discs() { return discs_; }
   PackageFinder& packages() { return packages_; }
+  ApkFinder& apks() { return apks_; }
   trg::SettingsStore& launcher_settings() { return *launcher_settings_; }
   const trg::Fonts& fonts() const { return fonts_; }
   const AppOptions& options() const { return options_; }
@@ -159,6 +161,7 @@ class App {
   Texture logo_;
   DiscFinder discs_;
   PackageFinder packages_;
+  ApkFinder apks_;
   trg::Fonts fonts_;
   trg::UpdaterConfig self_updater_;
   trg::UpdatesState self_updates_;
@@ -183,7 +186,7 @@ void DrawProjects(App& app);  // projects_screen.cpp
 void DrawHub(App& app, int game);
 void FocusHubPlay();
 void DrawGameSettings(App& app, int game);
-int FindGameSection(const char* name);  // -1 when there is no such section
+int FindGameSection(const char* name, int game = 0);  // -1 when there is no such section
 void DrawInstall(App& app, int game);
 void DrawCollection(App& app);
 
