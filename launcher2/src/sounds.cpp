@@ -20,6 +20,9 @@ struct Voice {
   float gain = 1.0f;
 };
 
+// Everything the launcher plays is scaled by this, so its sounds sit under the game's rather than over them.
+constexpr float kMasterGain = 0.4f;
+
 SDL_AudioDeviceID g_device = 0;
 std::array<std::vector<float>, size_t(Sound::kCount)> g_sounds;
 std::array<Voice, 8> g_voices;
@@ -94,7 +97,7 @@ void Mix(void*, Uint8* stream, int len) {
   for (Voice& v : g_voices) {
     if (!v.samples) continue;
     for (int i = 0; i < frames && v.pos < v.samples->size(); ++i, ++v.pos) {
-      const float s = (*v.samples)[v.pos] * v.gain;
+      const float s = (*v.samples)[v.pos] * v.gain * kMasterGain;
       out[i * 2] += s;
       out[i * 2 + 1] += s;
     }
